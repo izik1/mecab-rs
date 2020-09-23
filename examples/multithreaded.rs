@@ -9,7 +9,7 @@ fn main() {
     let model = Model::new("");
 
     // create tagger based on the model
-    let tagger = model.create_tagger();
+    let tagger = model.create_tagger().expect("tagger creation failed");
 
     // create lattice object per thread
     let mut lattice = model.create_lattice();
@@ -31,24 +31,26 @@ fn main() {
                 print!("{} EOS ", node.id);
             }
             _ => {
-                print!("{} {} ", node.id, &(node.surface)[..(node.length as usize)]);
+                print!("{} {} ", node.id, node.visible());
             }
         }
 
-        println!("{} {} {} {} {} {} {} {} {} {} {} {} {}",
-                 node.feature,
-                 input.len() as isize - node.surface.len() as isize,
-                 input.len() as isize - node.surface.len() as isize + node.length as isize,
-                 node.rcattr,
-                 node.lcattr,
-                 node.posid,
-                 node.char_type,
-                 node.stat,
-                 node.isbest,
-                 node.alpha,
-                 node.beta,
-                 node.prob,
-                 node.cost);
+        println!(
+            "{} {} {} {} {} {} {} {} {} {} {} {} {}",
+            node.feature(),
+            input.len() as isize - node.surface().len() as isize,
+            input.len() as isize - node.surface().len() as isize + node.length as isize,
+            node.rcattr,
+            node.lcattr,
+            node.posid,
+            node.char_type,
+            node.stat,
+            node.isbest,
+            node.alpha,
+            node.beta,
+            node.prob,
+            node.cost
+        );
     }
 
     // iterate over begin and end nodes
@@ -59,13 +61,13 @@ fn main() {
 
         if let Some(nodes) = b {
             for node in nodes.iter_bnext() {
-                println!("B[{}] {}\t{}", i, node.surface, node.feature);
+                println!("B[{}] {}\t{}", i, node.surface(), node.feature());
             }
         }
 
         if let Some(nodes) = e {
             for node in nodes.iter_enext() {
-                println!("E[{}] {}\t{}", i, node.surface, node.feature);
+                println!("E[{}] {}\t{}", i, node.surface(), node.feature());
             }
         }
     }
@@ -93,10 +95,7 @@ fn main() {
     println!("{}", lattice.theta());
 
     for node in lattice.bos_node().iter_next() {
-        println!("{}\t{}\t{}",
-                 &(node.surface)[..(node.length as usize)],
-                 node.feature,
-                 node.prob);
+        println!("{}\t{}\t{}", node.visible(), node.feature(), node.prob);
     }
 
     // dictionary info
