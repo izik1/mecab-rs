@@ -45,7 +45,17 @@ extern "C" {
     fn mecab_get_all_morphs(mecab: *mut c_void) -> c_int;
     fn mecab_set_all_morphs(mecab: *mut c_void, all_morphs: c_int);
     fn mecab_parse_lattice(mecab: *mut c_void, lattice: *mut c_void) -> c_int;
+
+    /// Parse given sentence and return parsed result as string.
+    /// You should not delete the returned string. The returned buffer
+    /// is overwritten when parse method is called again.
+    /// This method is NOT thread safe.
+    #[allow(dead_code)] // keep the function here for documentation purposes.
     fn mecab_sparse_tostr(mecab: *mut c_void, str: *const c_char) -> *const c_char;
+
+    /// The same as `mecab_sparse_tostr`, but with input length (bytes) passed.
+    fn mecab_sparse_tostr2(mecab: *mut c_void, str: *const c_char, len: size_t) -> *const c_char;
+
     fn mecab_sparse_tonode(mecab: *mut c_void, str: *const c_char) -> *const raw_node;
     fn mecab_nbest_sparse_tostr(mecab: *mut c_void, N: size_t, str: *const c_char)
         -> *const c_char;
@@ -111,14 +121,27 @@ pub fn version() -> String {
     unsafe { ptr_to_string(mecab_version()) }
 }
 
-pub fn last_error() -> Option<CString> {
+// todo: see if the unique reference requirement can be made more lax.
+/// # Safety
+/// `mecab` must be a valid reference *or* a null pointer.
+/// `mecab` must be uniquely referenced for at least the chosen lifetime `'a`
+/// Note: For a null pointer it isn't clear how long the reference should be valid, this is a possible source of unsoundness.
+unsafe fn last_error<'a>(mecab: *mut c_void) -> Option<&'a CStr> {
+    let err = mecab_strerror(mecab);
+    if !err.is_null() {
+        Some(CStr::from_ptr(err))
+    } else {
+        None
+    }
+}
+
+pub fn global_last_error() -> Option<CString> {
+    // safety: `ptr::null_mut` is a valid input to this function.
+    // there *might* be a soundness issue with having the returned reference at all (including when and before it was created.)
     unsafe {
-        let err = mecab_strerror(ptr::null_mut());
-        if !err.is_null() {
-            Some(CStr::from_ptr(err).to_owned()).filter(|s| !s.as_bytes().is_empty())
-        } else {
-            None
-        }
+        last_error(ptr::null_mut())
+            .filter(|s| !s.to_bytes().is_empty())
+            .map(ToOwned::to_owned)
     }
 }
 
@@ -138,7 +161,7 @@ impl Tagger {
 
             let inner = match inner {
                 Some(inner) => inner,
-                None => return Err(last_error()),
+                None => return Err(global_last_error()),
             };
 
             Ok(Tagger {
@@ -156,15 +179,20 @@ impl Tagger {
         }
     }
 
+    /// uses a unique reference to `self` to get the last error reported.
+    /// the unique reference ensures that nothing invalidates it, if you only have a `&self`, use [`last_error`] instead.
+    pub fn last_error_ref(&mut self) -> Option<&CStr> {
+        // Safety:
+        // `self.inner` is guaranteed to be valid (library invariant)
+        // this borrow is tied to `&mut self`, satisfying that requirement.
+        unsafe { last_error(self.inner.as_ptr()) }
+    }
+
     pub fn last_error(&self) -> Option<CString> {
-        unsafe {
-            let err = mecab_strerror(self.inner.as_ptr());
-            if !err.is_null() {
-                Some(CStr::from_ptr(err).to_owned())
-            } else {
-                None
-            }
-        }
+        // Safety:
+        // `self.inner` is guaranteed to be valid (library invariant)
+        // this borrow is immediately dropped (see `global_last_error` to see discussion on if this is sound or not due to not having a mutable reference)
+        unsafe { last_error(self.inner.as_ptr()) }.map(ToOwned::to_owned)
     }
 
     /// Return true if partial parsing mode is on.
@@ -213,12 +241,54 @@ impl Tagger {
         unsafe { mecab_parse_lattice(self.inner.as_ptr(), latice.inner) != 0 }
     }
 
-    pub fn parse_str<T: Into<Vec<u8>>>(&self, input: T) -> String {
-        unsafe {
-            ptr_to_string(mecab_sparse_tostr(
+    /// # Panics
+    /// If the returned string is *not* valid UTF-8.
+    pub fn parse_to_str<'a, T: AsRef<[u8]> + ?Sized>(
+        &'a mut self,
+        input: &'a T,
+    ) -> Result<&str, Option<&str>> {
+        match self.parse_to_cstr(input) {
+            Ok(s) => Ok(s.to_str().expect("String was not valid UTF-8")),
+            Err(Some(e)) => Err(Some(e.to_str().expect("String was not valid UTF-8"))),
+            Err(None) => Err(None),
+        }
+    }
+
+    /// # Panics
+    /// If `input` contains any null bytes
+    pub fn parse_to_cstr<'a, T: AsRef<[u8]> + ?Sized>(
+        &'a mut self,
+        input: &'a T,
+    ) -> Result<&'a CStr, Option<&'a CStr>> {
+        let input = input.as_ref();
+        assert!(
+            input.iter().all(|&byte| byte != 0),
+            "BUG: null byte detected in input string; a proper error hasn't been created yet."
+        );
+
+        // note: we use `mecab_sparse_tostr2` to avoid calculating a length for no reason ()
+        // Safety:
+        // requires exclusive access to `self.inner` (for the length of the function call)
+        // *might* require there to be no null bytes inside the `input` string. (assume yes until proven otherwise)
+        // `input` must live for the length of the call.
+        let res = unsafe {
+            mecab_sparse_tostr2(
                 self.inner.as_ptr(),
-                str_to_ptr(&CString::new(input).unwrap()),
-            ))
+                input.as_ptr() as *const c_char,
+                input.len(),
+            )
+        };
+
+        match res.is_null() {
+            true => Err(self.last_error_ref()),
+            // Safety:
+            // `res` isn't null, so we assume that `mecab_sparse_tostr2` returned valid data.
+            // documentation of the function claims that `res` is valid until the next parse function is called.
+            // So we can tie it to `&mut 'a self`
+            // Note that the above is overly strict, it's only calls to parse functions on self that require this,
+            // but we can't do anything about that.
+            // It isn't clear if it requires `input` to also remain valid, so we assume it does.
+            false => unsafe { Ok(CStr::from_ptr(res)) },
         }
     }
 
@@ -816,7 +886,7 @@ impl DictionaryInfo {
 }
 
 fn str_to_ptr(input: &CString) -> *const i8 {
-    input.as_ptr() as *const i8
+    input.as_ptr()
 }
 
 fn str_to_heap_ptr<T: Into<Vec<u8>>>(input: T) -> *mut i8 {

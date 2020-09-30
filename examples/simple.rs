@@ -11,12 +11,12 @@ fn main() {
     let mut tagger =
         Tagger::new("-d /home/cr/Downloads/unidic-csj-3.0.1.1").expect("failed to create tagger");
 
-    // gets tagged result as String
-    let mut result = tagger.parse_str(input);
+    // gets tagged result as str
+    let result = tagger.parse_to_str(input).expect("failed to parse input");
     println!("RESULT: {}", result);
 
     // gets N best results as String
-    result = tagger.parse_nbest(3, input);
+    let result = tagger.parse_nbest(3, input);
     println!("NBEST:\n{}", result);
 
     // gets N best in sequence
