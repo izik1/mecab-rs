@@ -111,16 +111,37 @@ pub fn version() -> String {
     unsafe { ptr_to_string(mecab_version()) }
 }
 
+pub fn last_error() -> Option<CString> {
+    unsafe {
+        let err = mecab_strerror(ptr::null_mut());
+        if !err.is_null() {
+            Some(CStr::from_ptr(err).to_owned()).filter(|s| !s.as_bytes().is_empty())
+        } else {
+            None
+        }
+    }
+}
+
 pub struct Tagger {
     inner: NonNull<c_void>,
     input: *const i8,
 }
 
+/// When properly handled (no bugs), Tagger is perfectly capable of being send/sync. _But_ there are bugs, so beware of UB.
+unsafe impl Send for Tagger {}
+unsafe impl Sync for Tagger {}
+
 impl Tagger {
-    pub fn new<T: Into<Vec<u8>>>(arg: T) -> Option<Tagger> {
+    pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Tagger, Option<CString>> {
         unsafe {
-            let inner = NonNull::new(mecab_new2(str_to_ptr(&CString::new(arg).unwrap())))?;
-            Some(Tagger {
+            let inner = NonNull::new(mecab_new2(str_to_ptr(&CString::new(arg).unwrap())));
+
+            let inner = match inner {
+                Some(inner) => inner,
+                None => return Err(last_error()),
+            };
+
+            Ok(Tagger {
                 inner,
                 input: ptr::null(),
             })
@@ -135,17 +156,26 @@ impl Tagger {
         }
     }
 
-    pub fn get_last_error(&self) -> String {
-        unsafe { ptr_to_string(mecab_strerror(self.inner.as_ptr())) }
+    pub fn last_error(&self) -> Option<CString> {
+        unsafe {
+            let err = mecab_strerror(self.inner.as_ptr());
+            if !err.is_null() {
+                Some(CStr::from_ptr(err).to_owned())
+            } else {
+                None
+            }
+        }
     }
 
+    /// Return true if partial parsing mode is on.
+    #[deprecated(note = "use `Lattice::has_request_type(MECAB_PARTIAL)` instead")]
     pub fn partial(&self) -> bool {
         unsafe { mecab_get_partial(self.inner.as_ptr()) != 0 }
     }
 
-    pub fn set_partial(&self, partial: i32) {
+    pub fn set_partial(&mut self, partial: bool) {
         unsafe {
-            mecab_set_partial(self.inner.as_ptr(), partial);
+            mecab_set_partial(self.inner.as_ptr(), partial as i32);
         }
     }
 
@@ -192,6 +222,11 @@ impl Tagger {
         }
     }
 
+    /// Parse given sentence and return Node object.
+    /// You should not delete the returned node object. The returned buffer
+    /// is overwritten when parse method is called again.
+    /// You can traverse all nodes via Node::next member.
+    /// This method is NOT thread safe.
     pub fn parse_to_node<'a, T: Into<Vec<u8>>>(&'a mut self, input: T) -> Node<'a> {
         unsafe {
             self.free_input();
@@ -201,6 +236,11 @@ impl Tagger {
         }
     }
 
+    /// Parse given sentence and obtain N-best results as a string format.
+    /// Currently, N must be 1 <= N <= 512 due to the limitation of the buffer size.
+    /// You should not delete the returned string. The returned buffer
+    /// is overwritten when parse method is called again.
+    /// This method is DEPRECATED. Use Lattice class.
     pub fn parse_nbest<T: Into<Vec<u8>>>(&self, n: usize, input: T) -> String {
         unsafe {
             ptr_to_string(mecab_nbest_sparse_tostr(
@@ -275,6 +315,8 @@ impl Lattice {
         }
     }
 
+    // UB: drops self.input without borrow
+    // UB: drops self.input while "something" requiring it may still be alive.
     fn free_input(&self) {
         unsafe {
             if !self.input.is_null() {
@@ -487,7 +529,14 @@ impl Model {
         }
     }
 
-    pub fn swap(&self, model: &Model) -> bool {
+    /// Swap the instance with `model`.
+    /// The ownership of `model` always moves to this instance,
+    /// meaning that passed |model| will no longer be accessible after calling this method.
+    /// return true if new model is swapped successfully.
+    /// This method is thread safe. All taggers created by
+    /// `Model::create_tagger` will also be updated asynchronously.
+    /// No need to stop the parsing thread excplicitly before swapping model object.
+    pub fn swap(&self, model: Model) -> bool {
         unsafe { mecab_model_swap(self.inner, model.inner) != 0 }
     }
 
