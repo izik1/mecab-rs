@@ -1,6 +1,6 @@
 extern crate mecab;
 
-use mecab::{Lattice, Node, Tagger};
+use mecab::{Lattice, Node, Tagger, node::NodeStat};
 
 fn main() {
     dbg!(std::mem::size_of::<Node>());
@@ -27,38 +27,38 @@ fn main() {
         }
     }
 
-    for node in tagger.parse_to_node(input).iter_next() {
-        match node.stat as i32 {
-            mecab::MECAB_BOS_NODE => {
-                print!("{} BOS ", node.id);
+    for node in tagger
+        .parse_to_ref_node(input)
+        .expect("failed to parse input")
+        .iter_next()
+    {
+        match node.stat() {
+            NodeStat::BOS => {
+                print!("{} BOS ", node.id());
             }
-            mecab::MECAB_EOS_NODE => {
-                print!("{} EOS ", node.id);
+
+            NodeStat::EOS => {
+                print!("{} EOS ", node.id());
             }
+
             _ => {
-                print!(
-                    "{} {} ",
-                    node.id,
-                    &(node.surface())[..(node.length as usize)]
-                );
+                print!("{} {} ", node.id(), node.surface());
             }
         }
 
         println!(
-            "{} {} {} {} {} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {} {}",
             node.feature(),
-            input.len() as isize - node.surface().len() as isize,
-            input.len() as isize - node.surface().len() as isize + node.length as isize,
-            node.rcattr,
-            node.lcattr,
-            node.posid,
-            node.char_type,
-            node.stat,
-            node.isbest,
-            node.alpha,
-            node.beta,
-            node.prob,
-            node.cost
+            node.rcattr(),
+            node.lcattr(),
+            node.pos_id(),
+            node.char_type(),
+            node.stat(),
+            node.is_best(),
+            node.alpha(),
+            node.beta(),
+            node.prob(),
+            node.cost()
         );
     }
 
