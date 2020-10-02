@@ -5,7 +5,17 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{node::Node2, DictionaryInfo, Lattice, Node};
+use crate::{node::Node2, DictionaryInfo, Lattice};
+
+/// # Panics
+/// If the given CStr ends up not being a valid UTF-8 string
+fn map_res_str<'a>(res: Result<&'a CStr, Option<&'a CStr>>) -> Result<&'a str, Option<&'a str>> {
+    match res {
+        Ok(s) => Ok(s.to_str().expect("String was not valid UTF-8")),
+        Err(Some(e)) => Err(Some(e.to_str().expect("String was not valid UTF-8"))),
+        Err(None) => Err(None),
+    }
+}
 
 pub struct Tagger {
     inner: NonNull<c_void>,
@@ -116,11 +126,7 @@ impl Tagger {
         &'a mut self,
         input: &'a T,
     ) -> Result<&str, Option<&str>> {
-        match self.parse_to_cstr(input) {
-            Ok(s) => Ok(s.to_str().expect("String was not valid UTF-8")),
-            Err(Some(e)) => Err(Some(e.to_str().expect("String was not valid UTF-8"))),
-            Err(None) => Err(None),
-        }
+        map_res_str(self.parse_to_cstr(input))
     }
 
     /// # Panics
@@ -257,11 +263,7 @@ impl Tagger {
         input: &'a T,
     ) -> Result<&str, Option<&str>> {
         #[allow(deprecated)]
-        match self.parse_nbest_to_cstr(n, input) {
-            Ok(s) => Ok(s.to_str().expect("String was not valid UTF-8")),
-            Err(Some(e)) => Err(Some(e.to_str().expect("String was not valid UTF-8"))),
-            Err(None) => Err(None),
-        }
+        map_res_str(self.parse_nbest_to_cstr(n, input))
     }
 
     #[deprecated(note = "use `Lattice`")]
@@ -297,13 +299,33 @@ impl Tagger {
         }
     }
 
-    pub fn format_node(&self, node: Node) -> String {
-        unsafe {
-            crate::ptr_to_string(crate::mecab_format_node(
-                self.inner.as_ptr(),
-                node.inner as *const _,
-            ))
+    /// Return formatted node object. The format is specified with
+    /// --unk-format, --bos-format, --eos-format, and --eon-format respectively.
+    /// You should not delete the returned string. The returned buffer
+    /// is overwritten when parse method is called again.
+    /// This method is NOT thread safe.
+    /// This method is DEPRECATED. Use Lattice class.
+    #[deprecated(note = "use `Lattice`")]
+    pub fn format_node_to_cstr<'a>(
+        &'a mut self,
+        node: &Node2,
+    ) -> Result<&'a CStr, Option<&'a CStr>> {
+        let res = unsafe {
+            crate::mecab_format_node(self.inner.as_ptr(), node as *const Node2 as *const _)
+        };
+
+        match res.is_null() {
+            true => Err(self.last_error_ref()),
+            false => unsafe { Ok(CStr::from_ptr(res)) },
         }
+    }
+
+    /// # Panics
+    /// If the returned string is *not* valid UTF-8.
+    #[deprecated(note = "use `Lattice`")]
+    pub fn format_node_to_str<'a>(&'a mut self, node: &Node2) -> Result<&'a str, Option<&'a str>> {
+        #[allow(deprecated)]
+        map_res_str(self.format_node_to_cstr(node))
     }
 
     pub fn dictionary_info(&self) -> DictionaryInfo {
