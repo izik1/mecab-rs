@@ -1,6 +1,6 @@
 extern crate mecab;
 
-use mecab::{Lattice, Node, Tagger, node::NodeStat};
+use mecab::{node::NodeStat, Lattice, Node, Tagger};
 
 fn main() {
     dbg!(std::mem::size_of::<Node>());
@@ -16,19 +16,25 @@ fn main() {
     println!("RESULT: {}", result);
 
     // gets N best results as String
-    let result = tagger.parse_nbest(3, input);
+    let result = tagger
+        .parse_nbest_to_str(3, input)
+        .expect("failed to parse input");
+
     println!("NBEST:\n{}", result);
 
     // gets N best in sequence
-    tagger.parse_nbest_init(input);
+    let mut nbest = tagger
+        .parse_nbest_init(input)
+        .expect("failed to parse input");
+
     for i in 0..3 {
-        if let Some(res) = tagger.next() {
+        if let Some(res) = nbest.next_str() {
             println!("{}:\n{}", i, res);
         }
     }
 
     for node in tagger
-        .parse_to_ref_node(input)
+        .parse_to_node(input)
         .expect("failed to parse input")
         .iter_next()
     {

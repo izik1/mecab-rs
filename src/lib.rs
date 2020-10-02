@@ -68,17 +68,70 @@ extern "C" {
     /// This method is NOT thread safe.
     /// @param str sentence
     /// @return bos node object
+    #[allow(dead_code)] // keep the function here for documentation purposes.
     fn mecab_sparse_tonode(mecab: *mut c_void, str: *const c_char) -> *const raw_node;
 
     /// The same as parseToNode(), but input length can be passed
     fn mecab_sparse_tonode2(mecab: *mut c_void, str: *const c_char, len: size_t)
         -> *const raw_node;
 
+    /// Parse given sentence and obtain N-best results as a string format.
+    /// Currently, N must be 1 <= N <= 512 due to the limitation of the buffer size.
+    /// You should not delete the returned string. The returned buffer
+    /// is overwritten when parse method is called again.
+    /// This method is DEPRECATED. Use Lattice class.
+    /// @param N how many results you want to obtain
+    /// @param str sentence
+    /// @return parsed result
+    #[allow(dead_code)] // keep the function here for documentation purposes.
     fn mecab_nbest_sparse_tostr(mecab: *mut c_void, N: size_t, str: *const c_char)
         -> *const c_char;
+
+    ///
+    /// The same as parseNBest(), but input length can be passed.
+    /// @param N how many results you want to obtain
+    /// @param str sentence
+    /// @param len sentence length
+    /// @return parsed result
+    ///
+    fn mecab_nbest_sparse_tostr2(
+        mecab: *mut c_void,
+        N: size_t,
+        str: *const c_char,
+        len: size_t,
+    ) -> *const c_char;
+
+    /// Initialize N-best enumeration with a sentence.
+    /// Return true if initialization finishes successfully.
+    /// N-best result is obtained by calling next() or nextNode() in sequence.
+    /// This method is NOT thread safe.
+    /// This method is DEPRECATED. Use Lattice class.
+    /// @param str sentence
+    /// @return boolean
+    #[allow(dead_code)] // keep the function here for documentation purposes.
     fn mecab_nbest_init(mecab: *mut c_void, str: *const c_char) -> c_int;
+
+    /// The same as parseNBestInit(), but input length can be passed.
+    /// @param str sentence
+    /// @param len sentence length
+    /// @return boolean
+    /// @return parsed result
+    fn mecab_nbest_init2(mecab: *mut c_void, str: *const c_char, len: size_t) -> c_int;
+
+    /// Return next-best parsed result. You must call parseNBestInit() in advance.
+    /// Return NULL if no more reuslts are available.
+    /// This method is NOT thread safe.
+    /// This method is DEPRECATED. Use Lattice class.
+    /// @return parsed result
     fn mecab_nbest_next_tostr(mecab: *mut c_void) -> *const c_char;
+
+    /// Return next-best parsed result. You must call parseNBestInit() in advance.
+    /// Return NULL if no more reuslt is available.
+    /// This method is NOT thread safe.
+    /// This method is DEPRECATED. Use Lattice class.
+    /// @return node object
     fn mecab_nbest_next_tonode(mecab: *mut c_void) -> *const raw_node;
+
     fn mecab_format_node(mecab: *mut c_void, node: *const raw_node) -> *const c_char;
     fn mecab_dictionary_info(mecab: *mut c_void) -> *const dictionary_info_t;
 

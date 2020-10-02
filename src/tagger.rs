@@ -1,14 +1,14 @@
 use std::{
     ffi::{c_void, CStr, CString},
+    marker::PhantomData,
     os::raw::c_char,
-    ptr::{self, NonNull},
+    ptr::NonNull,
 };
 
 use crate::{node::Node2, DictionaryInfo, Lattice, Node};
 
 pub struct Tagger {
     inner: NonNull<c_void>,
-    input: *const i8,
 }
 
 /// When properly handled (no bugs), Tagger is perfectly capable of being send/sync. _But_ there are bugs, so beware of UB.
@@ -19,10 +19,7 @@ impl Tagger {
     /// # Safety
     /// This function assumes that `inner` is a valid pointer to a mecab object.
     pub(crate) unsafe fn from_ptr(raw: NonNull<c_void>) -> Self {
-        Self {
-            inner: raw,
-            input: ptr::null(),
-        }
+        Self { inner: raw }
     }
 
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Tagger, Option<CString>> {
@@ -36,18 +33,7 @@ impl Tagger {
                 None => return Err(crate::global_last_error()),
             };
 
-            Ok(Tagger {
-                inner,
-                input: ptr::null(),
-            })
-        }
-    }
-
-    fn free_input(&mut self) {
-        unsafe {
-            if !self.input.is_null() {
-                CString::from_raw(self.input as *mut i8);
-            }
+            Ok(Tagger { inner })
         }
     }
 
@@ -73,6 +59,9 @@ impl Tagger {
         unsafe { crate::mecab_get_partial(self.inner.as_ptr()) != 0 }
     }
 
+    #[deprecated(
+        note = "use `Lattice::add_request_type(MECAB_PARTIAL)` or `Lattice::remove_request_type(MECAB_PARTIAL)`"
+    )]
     pub fn set_partial(&mut self, partial: bool) {
         unsafe {
             crate::mecab_set_partial(self.inner.as_ptr(), partial as i32);
@@ -210,39 +199,93 @@ impl Tagger {
     /// You should not delete the returned string. The returned buffer
     /// is overwritten when parse method is called again.
     /// This method is DEPRECATED. Use Lattice class.
-    pub fn parse_nbest<T: Into<Vec<u8>>>(&self, n: usize, input: T) -> String {
-        unsafe {
-            crate::ptr_to_string(crate::mecab_nbest_sparse_tostr(
+    /// # Panics
+    /// If `input` contains any null bytes
+    #[deprecated(note = "use `Lattice`")]
+    pub fn parse_nbest_to_cstr<'a, T: AsRef<[u8]> + ?Sized>(
+        &'a mut self,
+        n: usize,
+        input: &'a T,
+    ) -> Result<&'a CStr, Option<&'a CStr>> {
+        let input = input.as_ref();
+        assert!(
+            input.iter().all(|&byte| byte != 0),
+            "BUG: null byte detected in input string; a proper error hasn't been created yet."
+        );
+
+        // note: we use `mecab_nbest_sparse_tostr2` to avoid calculating a length for no reason ()
+        // Safety:
+        // requires exclusive access to `self.inner` (for the length of the function call)
+        // *might* require there to be no null bytes inside the `input` string. (assume yes until proven otherwise)
+        // `input` must live for the length of the call.
+        let res = unsafe {
+            crate::mecab_nbest_sparse_tostr2(
                 self.inner.as_ptr(),
                 n,
-                crate::str_to_ptr(&CString::new(input).unwrap()),
-            ))
+                input.as_ptr() as *const c_char,
+                input.len(),
+            )
+        };
+
+        match res.is_null() {
+            true => Err(self.last_error_ref()),
+            // Safety:
+            // `res` isn't null, so we assume that `mecab_nbest_sparse_tostr2` returned valid data.
+            // documentation of the function claims that `res` is valid until the next parse function is called.
+            // So we can tie it to `&mut 'a self`
+            // Note that the above is overly strict, it's only calls to parse functions on self that require this,
+            // but we can't do anything about that.
+            // It isn't clear if it requires `input` to also remain valid, so we assume it does.
+            false => unsafe { Ok(CStr::from_ptr(res)) },
         }
     }
 
-    pub fn parse_nbest_init<T: Into<Vec<u8>>>(&mut self, input: T) -> bool {
-        unsafe {
-            self.free_input();
-            self.input = crate::str_to_heap_ptr(input);
-            crate::mecab_nbest_init(self.inner.as_ptr(), self.input) != 0
+    /// # Panics
+    /// If the returned string is *not* valid UTF-8.
+    #[deprecated(note = "use `Lattice`")]
+    pub fn parse_nbest_to_str<'a, T: AsRef<[u8]> + ?Sized>(
+        &'a mut self,
+        n: usize,
+        input: &'a T,
+    ) -> Result<&str, Option<&str>> {
+        #[allow(deprecated)]
+        match self.parse_nbest_to_cstr(n, input) {
+            Ok(s) => Ok(s.to_str().expect("String was not valid UTF-8")),
+            Err(Some(e)) => Err(Some(e.to_str().expect("String was not valid UTF-8"))),
+            Err(None) => Err(None),
         }
     }
 
-    pub fn next(&self) -> Option<String> {
-        unsafe {
-            let ptr = crate::mecab_nbest_next_tostr(self.inner.as_ptr());
-            if !ptr.is_null() {
-                Some(crate::ptr_to_string(ptr))
-            } else {
-                None
-            }
-        }
-    }
+    #[deprecated(note = "use `Lattice`")]
+    pub fn parse_nbest_init<'a, T: AsRef<[u8]> + ?Sized>(
+        &'a mut self,
+        input: &'a T,
+    ) -> Result<NBest<'a>, Option<&'a CStr>> {
+        let input = input.as_ref();
+        assert!(
+            input.iter().all(|&byte| byte != 0),
+            "BUG: null byte detected in input string; a proper error hasn't been created yet."
+        );
 
-    pub fn next_node<'a>(&'a self) -> Option<Node<'a>> {
-        unsafe {
-            let ptr = crate::mecab_nbest_next_tonode(self.inner.as_ptr());
-            Node::from_raw(ptr)
+        // note: we use `mecab_nbest_init2` to avoid calculating a length for no reason ()
+        // Safety:
+        // requires exclusive access to `self.inner` (for the length of the function call)
+        // *might* require there to be no null bytes inside the `input` string. (assume yes until proven otherwise)
+        // `input` must live for the length of the call.
+        let res = unsafe {
+            crate::mecab_nbest_init2(
+                self.inner.as_ptr(),
+                input.as_ptr() as *const c_char,
+                input.len(),
+            ) == 1
+        };
+
+        match res {
+            false => Err(self.last_error_ref()),
+            true => Ok(NBest {
+                tagger: self,
+                _input: PhantomData,
+            }),
         }
     }
 
@@ -264,7 +307,53 @@ impl Drop for Tagger {
     fn drop(&mut self) {
         unsafe {
             crate::mecab_destroy(self.inner.as_ptr());
-            self.free_input();
+        }
+    }
+}
+
+/// Safety Note: While this struct is in use, it *cannot* call any of the parse methods on it.
+pub struct NBest<'a> {
+    tagger: &'a mut Tagger,
+    // while we don't directly need access to this, we need to ensure that we know to keep that around.
+    _input: PhantomData<&'a [u8]>,
+}
+
+impl<'a> NBest<'a> {
+    pub fn next_cstr(&mut self) -> Option<&CStr> {
+        // Safety:
+        // requires exclusive access to `self.tagger.inner` (for the length of the function call)
+        let res = unsafe { crate::mecab_nbest_next_tostr(self.tagger.inner.as_ptr()) };
+
+        match res.is_null() {
+            true => None,
+            // Safety:
+            // `res` isn't null, so we assume that `mecab_nbest_next_tostr` returned valid data.
+            // documentation of the function claims that `res` is valid until the next `next_*` function is called.
+            // So we can tie it to `&mut 'a self`
+            false => unsafe { Some(CStr::from_ptr(res)) },
+        }
+    }
+
+    /// # Panics
+    /// If the returned string is *not* valid UTF-8.
+    pub fn next_str(&mut self) -> Option<&str> {
+        self.next_cstr()
+            .map(CStr::to_str)
+            .transpose()
+            .expect("String was not valid UTF-8")
+    }
+
+    pub fn next_node(&mut self) -> Option<&'a Node2<'a>> {
+        // Safety:
+        // requires exclusive access to `self.tagger.inner` (for the length of the function call)
+        let res = unsafe { crate::mecab_nbest_next_tonode(self.tagger.inner.as_ptr()) };
+        match res.is_null() {
+            true => None,
+            // Safety:
+            // `res` isn't null, so we assume that `mecab_nbest_next_tonode` returned valid data.
+            // documentation of the function claims that `res` is valid until the next `next_*` function is called.
+            // So we can tie it to `&mut 'a self`
+            false => unsafe { Some(&*(res as *const _)) },
         }
     }
 }
