@@ -41,13 +41,13 @@ extern "C" {
     fn mecab_version() -> *const c_char;
     fn mecab_strerror(mecab: *mut c_void) -> *const c_char;
     fn mecab_destroy(mecab: *mut c_void);
-    fn mecab_get_partial(mecab: *mut c_void) -> c_int;
+    fn mecab_get_partial(mecab: *const c_void) -> c_int;
     fn mecab_set_partial(mecab: *mut c_void, partial: c_int);
-    fn mecab_get_theta(mecab: *mut c_void) -> c_float;
+    fn mecab_get_theta(mecab: *const c_void) -> c_float;
     fn mecab_set_theta(mecab: *mut c_void, theta: c_float);
-    fn mecab_get_lattice_level(mecab: *mut c_void) -> c_int;
+    fn mecab_get_lattice_level(mecab: *const c_void) -> c_int;
     fn mecab_set_lattice_level(mecab: *mut c_void, level: c_int);
-    fn mecab_get_all_morphs(mecab: *mut c_void) -> c_int;
+    fn mecab_get_all_morphs(mecab: *const c_void) -> c_int;
     fn mecab_set_all_morphs(mecab: *mut c_void, all_morphs: c_int);
     fn mecab_parse_lattice(mecab: *mut c_void, lattice: *mut c_void) -> c_int;
 
@@ -149,7 +149,11 @@ extern "C" {
     fn mecab_lattice_get_z(lattice: *mut c_void) -> c_double;
     fn mecab_lattice_set_z(lattice: *mut c_void, Z: c_double);
     fn mecab_lattice_get_theta(lattice: *mut c_void) -> c_double;
+
+    /// Set temparature parameter theta.
+    /// @param theta temparature parameter.
     fn mecab_lattice_set_theta(lattice: *mut c_void, theta: c_double);
+
     fn mecab_lattice_next(lattice: *mut c_void) -> c_int;
     fn mecab_lattice_get_request_type(lattice: *mut c_void) -> c_int;
     fn mecab_lattice_has_request_type(lattice: *mut c_void, request_type: c_int) -> c_int;
@@ -189,6 +193,7 @@ extern "C" {
 
 pub use tagger::Tagger;
 
+// todo: it seems that mecab just uses a `static` string here, so we can probably return a `&'static str`
 pub fn version() -> String {
     unsafe { ptr_to_string(mecab_version()) }
 }

@@ -59,40 +59,48 @@ impl Tagger {
         unsafe { crate::mecab_get_partial(self.inner.as_ptr()) != 0 }
     }
 
-    #[deprecated(
-        note = "use `Lattice::add_request_type(MECAB_PARTIAL)` or `Lattice::remove_request_type(MECAB_PARTIAL)`"
-    )]
+    /// Set partial parsing mode.
+    #[deprecated(note = "use `Lattice::{add,remove}_request_type(MECAB_PARTIAL)`")]
     pub fn set_partial(&mut self, partial: bool) {
         unsafe {
             crate::mecab_set_partial(self.inner.as_ptr(), partial as i32);
         }
     }
 
+    /// Return temparature parameter theta.
     pub fn theta(&self) -> f32 {
         unsafe { crate::mecab_get_theta(self.inner.as_ptr()) }
     }
 
-    pub fn set_theata(&self, theta: f32) {
+    /// Set temparature parameter theta.
+    pub fn set_theta(&mut self, theta: f32) {
         unsafe {
             crate::mecab_set_theta(self.inner.as_ptr(), theta);
         }
     }
 
+    /// Get lattice level
+    #[deprecated(note = "use `Lattice::*_request_type()`")]
     pub fn lattice_level(&self) -> i32 {
         unsafe { crate::mecab_get_lattice_level(self.inner.as_ptr()) }
     }
 
-    pub fn set_lattice_level(&self, level: i32) {
+    /// Set lattice level
+    #[deprecated(note = "use `Lattice::*_request_type()`")]
+    pub fn set_lattice_level(&mut self, level: i32) {
         unsafe {
             crate::mecab_set_lattice_level(self.inner.as_ptr(), level);
         }
     }
 
+    /// Return true if all morphs output mode is on.
+    #[deprecated(note = "use `Lattice::has_request_type(MECAB_ALL_MORPHS)`")]
     pub fn all_morphs(&self) -> bool {
         unsafe { crate::mecab_get_all_morphs(self.inner.as_ptr()) != 0 }
     }
 
-    pub fn set_all_morphs(&self, all_morphs: i32) {
+    #[deprecated(note = "use `Lattice::{add,remove}_request_type(MECAB_ALL_MORPHS)`")]
+    pub fn set_all_morphs(&mut self, all_morphs: i32) {
         unsafe {
             crate::mecab_set_all_morphs(self.inner.as_ptr(), all_morphs);
         }

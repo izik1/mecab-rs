@@ -1,6 +1,6 @@
 extern crate mecab;
 
-use mecab::{node::NodeStat, Lattice, Node, Tagger};
+use mecab::{node::NodeStat, Node, Tagger};
 
 fn main() {
     dbg!(std::mem::size_of::<Node>());
