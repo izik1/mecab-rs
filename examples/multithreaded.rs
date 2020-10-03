@@ -6,7 +6,7 @@ fn main() {
     let input = "太郎は次郎が持っている本を花子に渡した。";
 
     // create model object
-    let model = Model::new("");
+    let model = Model::new("").expect("model creation failed");
 
     // create tagger based on the model
     let tagger = model.create_tagger().expect("tagger creation failed");

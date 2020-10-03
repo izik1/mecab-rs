@@ -1,9 +1,9 @@
 #![allow(non_camel_case_types)]
 
 mod dictionary;
+mod model;
 pub mod node;
 mod tagger;
-mod model;
 
 use std::{
     default::Default,
@@ -177,6 +177,12 @@ extern "C" {
     fn mecab_lattice_set_result(lattice: *mut c_void, result: *const c_char);
     fn mecab_lattice_strerror(lattice: *mut c_void) -> *const c_char;
 
+    /// Factory method to create a new Model with a string parameter representation, i.e.,
+    /// "-d /user/local/mecab/dic/ipadic -Ochasen".
+    /// Return NULL if new model cannot be initialized. Use MeCab::getLastError() to obtain the
+    /// cause of the errors.
+    /// @return new Model object
+    /// @param arg single string representation of the argment.
     fn mecab_model_new2(arg: *const c_char) -> *mut c_void;
     fn mecab_model_destroy(model: *mut c_void);
     fn mecab_model_new_tagger(model: *mut c_void) -> *mut c_void;
@@ -193,8 +199,8 @@ extern "C" {
     ) -> *const raw_node;
 }
 
-pub use tagger::Tagger;
 pub use model::Model;
+pub use tagger::Tagger;
 
 // todo: it seems that mecab just uses a `static` string here, so we can probably return a `&'static str`
 pub fn version() -> String {

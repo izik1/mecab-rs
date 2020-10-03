@@ -1,36 +1,48 @@
 use std::{
-    ffi::c_void,
-    ffi::CString,
+    ffi::{c_void, CString},
     ptr::{self, NonNull},
 };
 
-use crate::{str_to_heap_ptr, str_to_ptr, DictionaryInfo, Lattice, Node, Tagger};
+use crate::{DictionaryInfo, Lattice, Node, Tagger};
 
 pub struct Model {
-    inner: *mut c_void,
+    inner: NonNull<c_void>,
 }
 
 impl Model {
-    pub fn new(args: &str) -> Model {
+    /// Factory method to create a new Model with a string parameter representation, i.e.,
+    /// "-d /user/local/mecab/dic/ipadic -Ochasen".
+    /// Return NULL if new model cannot be initialized. Use MeCab::getLastError() to obtain the
+    /// cause of the errors.
+    pub fn new(args: &str) -> Result<Model, Option<CString>> {
         unsafe {
-            Model {
-                inner: crate::mecab_model_new2(str_to_ptr(&CString::new(args).unwrap())),
-            }
+            let inner = NonNull::new(crate::mecab_model_new2(crate::str_to_ptr(
+                &CString::new(args).unwrap(),
+            )));
+
+            let inner = match inner {
+                Some(inner) => inner,
+                None => return Err(crate::global_last_error()),
+            };
+
+            Ok(Model { inner })
         }
     }
 
+    // todo: probably unsound
     pub fn create_tagger(&self) -> Option<Tagger> {
         unsafe {
-            let inner = NonNull::new(crate::mecab_model_new_tagger(self.inner))?;
+            let inner = NonNull::new(crate::mecab_model_new_tagger(self.inner.as_ptr()))?;
 
             Some(Tagger::from_ptr(inner))
         }
     }
 
+    // todo: probably unsound
     pub fn create_lattice(&self) -> Lattice {
         unsafe {
             Lattice {
-                inner: crate::mecab_model_new_lattice(self.inner),
+                inner: crate::mecab_model_new_lattice(self.inner.as_ptr()),
                 input: ptr::null(),
             }
         }
@@ -43,24 +55,28 @@ impl Model {
     /// This method is thread safe. All taggers created by
     /// `Model::create_tagger` will also be updated asynchronously.
     /// No need to stop the parsing thread excplicitly before swapping model object.
+    // todo: probably unsound
     pub fn swap(&self, model: Model) -> bool {
-        unsafe { crate::mecab_model_swap(self.inner, model.inner) != 0 }
+        unsafe { crate::mecab_model_swap(self.inner.as_ptr(), model.inner.as_ptr()) != 0 }
     }
 
+    // todo: probably unsound
     pub fn dictionary_info(&self) -> DictionaryInfo {
-        unsafe { DictionaryInfo::new(crate::mecab_model_dictionary_info(self.inner)) }
+        unsafe { DictionaryInfo::new(crate::mecab_model_dictionary_info(self.inner.as_ptr())) }
     }
 
+    // todo: probably unsound
     pub fn transition_cost(&self, rc_attr: u16, lc_attr: u16) -> i32 {
-        unsafe { crate::mecab_model_transition_cost(self.inner, rc_attr, lc_attr) }
+        unsafe { crate::mecab_model_transition_cost(self.inner.as_ptr(), rc_attr, lc_attr) }
     }
 
+    // todo: probably unsound
     pub fn lookup<'a>(&'a self, begin: &str, len: u64, lattice: &'a Lattice) -> Option<Node<'a>> {
         unsafe {
             let raw_node = crate::mecab_model_lookup(
-                self.inner,
-                str_to_heap_ptr(begin),
-                str_to_heap_ptr(begin).offset(len as isize),
+                self.inner.as_ptr(),
+                crate::str_to_heap_ptr(begin),
+                crate::str_to_heap_ptr(begin).offset(len as isize),
                 lattice.inner,
             );
             Node::from_raw(raw_node)
@@ -71,7 +87,7 @@ impl Model {
 impl Drop for Model {
     fn drop(&mut self) {
         unsafe {
-            crate::mecab_model_destroy(self.inner);
+            crate::mecab_model_destroy(self.inner.as_ptr());
         }
     }
 }

@@ -95,9 +95,7 @@ impl<'a> Node2<'a> {
     }
 
     pub fn feature(&self) -> &str {
-        self.feature_cstr()
-            .to_str()
-            .expect("feature was not valid UTF-8")
+        self.feature_cstr().to_str().expect("feature was not valid UTF-8")
     }
 
     #[inline(always)]
@@ -179,31 +177,19 @@ impl<'a> Node2<'a> {
     }
 
     pub fn iter_prev(&'a self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::PREV,
-        }
+        NodeIter { current: Some(self), mode: Mode::PREV }
     }
 
     pub fn iter_next(&'a self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::NEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::NEXT }
     }
 
     pub fn iter_enext(&'a self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::ENEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::ENEXT }
     }
 
     pub fn iter_bnext(&'a self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::BNEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::BNEXT }
     }
 }
 

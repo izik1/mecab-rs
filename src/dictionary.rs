@@ -1,4 +1,8 @@
-use std::{ffi::CStr, fmt, os::raw::c_char, os::raw::c_int, os::raw::c_uint, os::raw::c_ushort};
+use std::{
+    ffi::CStr,
+    fmt,
+    os::raw::{c_char, c_int, c_uint, c_ushort},
+};
 
 #[repr(C)]
 pub struct DictionaryInfo<'a> {
@@ -87,9 +91,7 @@ impl<'a> DictionaryInfo<'a> {
 
     /// Returns an iterator of `&self`
     pub fn iter(&self) -> DictIter<'_> {
-        DictIter {
-            current: Some(self),
-        }
+        DictIter { current: Some(self) }
     }
 }
 

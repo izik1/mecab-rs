@@ -34,9 +34,8 @@ impl Tagger {
     // todo: fix memory leak
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Tagger, Option<CString>> {
         unsafe {
-            let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
-                &CString::new(arg).unwrap(),
-            )));
+            let inner =
+                NonNull::new(crate::mecab_new2(crate::str_to_ptr(&CString::new(arg).unwrap())));
 
             let inner = match inner {
                 Some(inner) => inner,
@@ -292,10 +291,7 @@ impl Tagger {
 
         match res {
             false => Err(self.last_error_ref()),
-            true => Ok(NBest {
-                tagger: self,
-                _input: PhantomData,
-            }),
+            true => Ok(NBest { tagger: self, _input: PhantomData }),
         }
     }
 
@@ -367,10 +363,7 @@ impl<'a> NBest<'a> {
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
     pub fn next_str(&mut self) -> Option<&str> {
-        self.next_cstr()
-            .map(CStr::to_str)
-            .transpose()
-            .expect("String was not valid UTF-8")
+        self.next_cstr().map(CStr::to_str).transpose().expect("String was not valid UTF-8")
     }
 
     pub fn next_node(&mut self) -> Option<&'a Node2<'a>> {
