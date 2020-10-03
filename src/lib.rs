@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+mod dictionary;
 pub mod node;
 mod tagger;
 

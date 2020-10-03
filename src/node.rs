@@ -132,27 +132,14 @@ impl<'a> Node2<'a> {
 
     /// status of this `Node`.
     pub fn stat(&self) -> NodeStat {
-        if self.stat == NodeStat::Normal as u8 {
-            return NodeStat::Normal;
+        match self.stat {
+            0 => NodeStat::Normal,
+            1 => NodeStat::Unknown,
+            2 => NodeStat::BOS,
+            3 => NodeStat::EOS,
+            4 => NodeStat::EON,
+            _ => panic!("Unknown node stat type"),
         }
-
-        if self.stat == NodeStat::Unknown as u8 {
-            return NodeStat::Unknown;
-        }
-
-        if self.stat == NodeStat::BOS as u8 {
-            return NodeStat::BOS;
-        }
-
-        if self.stat == NodeStat::EOS as u8 {
-            return NodeStat::EOS;
-        }
-
-        if self.stat == NodeStat::EON as u8 {
-            return NodeStat::EON;
-        }
-
-        panic!("Unknown node stat type");
     }
 
     #[inline(always)]

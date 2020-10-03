@@ -5,7 +5,7 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{node::Node2, DictionaryInfo, Lattice};
+use crate::{dictionary::DictionaryInfo, node::Node2, Lattice};
 
 /// # Panics
 /// If the given CStr ends up not being a valid UTF-8 string
@@ -21,7 +21,6 @@ pub struct Tagger {
     inner: NonNull<c_void>,
 }
 
-/// When properly handled (no bugs), Tagger is perfectly capable of being send/sync. _But_ there are bugs, so beware of UB.
 unsafe impl Send for Tagger {}
 unsafe impl Sync for Tagger {}
 
@@ -328,8 +327,8 @@ impl Tagger {
         map_res_str(self.format_node_to_cstr(node))
     }
 
-    pub fn dictionary_info(&self) -> DictionaryInfo {
-        unsafe { DictionaryInfo::new(crate::mecab_dictionary_info(self.inner.as_ptr())) }
+    pub fn dictionary_info<'a>(&'a mut self) -> &'a DictionaryInfo<'a> {
+        unsafe { &*(crate::mecab_dictionary_info(self.inner.as_ptr()) as *const DictionaryInfo) }
     }
 }
 
