@@ -5,7 +5,7 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{dictionary::DictionaryInfo, node::Node2, Lattice};
+use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, Model};
 
 /// # Panics
 /// If the given CStr ends up not being a valid UTF-8 string
@@ -17,22 +17,17 @@ fn map_res_str<'a>(res: Result<&'a CStr, Option<&'a CStr>>) -> Result<&'a str, O
     }
 }
 
-pub struct Tagger {
+pub struct Tagger<'a> {
     inner: NonNull<c_void>,
+    phantom: PhantomData<Option<&'a Model>>,
 }
 
-unsafe impl Send for Tagger {}
-unsafe impl Sync for Tagger {}
+unsafe impl Send for Tagger<'_> {}
+unsafe impl Sync for Tagger<'_> {}
 
-impl Tagger {
-    /// # Safety
-    /// This function assumes that `inner` is a valid pointer to a mecab object.
-    pub(crate) unsafe fn from_ptr(raw: NonNull<c_void>) -> Self {
-        Self { inner: raw }
-    }
-
+impl Tagger<'static> {
     // todo: fix memory leak
-    pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Tagger, Option<CString>> {
+    pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Self, Option<CString>> {
         unsafe {
             let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
                 &CString::new(arg).unwrap(),
@@ -43,7 +38,22 @@ impl Tagger {
                 None => return Err(crate::global_last_error()),
             };
 
-            Ok(Tagger { inner })
+            Ok(Self {
+                inner,
+                phantom: PhantomData,
+            })
+        }
+    }
+}
+
+impl<'t> Tagger<'t> {
+    /// # Safety
+    /// This function assumes that `inner` is a valid pointer to a mecab object.
+    /// Additionally, it cannot ensure that the lifetime it's valid for is the proper lifetime.
+    pub(crate) unsafe fn from_ptr(raw: NonNull<c_void>) -> Self {
+        Self {
+            inner: raw,
+            phantom: PhantomData,
         }
     }
 
@@ -270,7 +280,7 @@ impl Tagger {
     pub fn parse_nbest_init<'a, T: AsRef<[u8]> + ?Sized>(
         &'a mut self,
         input: &'a T,
-    ) -> Result<NBest<'a>, Option<&'a CStr>> {
+    ) -> Result<NBest<'a, 't>, Option<&'a CStr>> {
         let input = input.as_ref();
         assert!(
             input.iter().all(|&byte| byte != 0),
@@ -334,7 +344,7 @@ impl Tagger {
     }
 }
 
-impl Drop for Tagger {
+impl Drop for Tagger<'_> {
     fn drop(&mut self) {
         unsafe {
             crate::mecab_destroy(self.inner.as_ptr());
@@ -343,13 +353,13 @@ impl Drop for Tagger {
 }
 
 /// Safety Note: While this struct is in use, it *cannot* call any of the parse methods on it.
-pub struct NBest<'a> {
-    tagger: &'a mut Tagger,
+pub struct NBest<'a, 't> {
+    tagger: &'a mut Tagger<'t>,
     // while we don't directly need access to this, we need to ensure that we know to keep that around.
     _input: PhantomData<&'a [u8]>,
 }
 
-impl<'a> NBest<'a> {
+impl<'a> NBest<'a, '_> {
     pub fn next_cstr(&mut self) -> Option<&CStr> {
         // Safety:
         // requires exclusive access to `self.tagger.inner` (for the length of the function call)

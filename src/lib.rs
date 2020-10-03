@@ -188,7 +188,12 @@ extern "C" {
     /// @param arg single string representation of the argment.
     fn mecab_model_new2(arg: *const c_char) -> *mut c_void;
     fn mecab_model_destroy(model: *mut c_void);
-    fn mecab_model_new_tagger(model: *mut c_void) -> *mut c_void;
+
+    /// Create a new Tagger object.
+    /// All returned tagger object shares this model object as a parsing model.
+    /// Never delete this model object before deleting tagger object.
+    /// @return new Tagger object
+    fn mecab_model_new_tagger(model: *const c_void) -> *mut c_void;
     fn mecab_model_new_lattice(model: *mut c_void) -> *mut c_void;
     fn mecab_model_swap(model: *mut c_void, new_model: *mut c_void) -> c_int;
 

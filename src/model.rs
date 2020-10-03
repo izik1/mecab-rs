@@ -29,8 +29,9 @@ impl Model {
         }
     }
 
-    // todo: probably unsound
-    pub fn create_tagger(&self) -> Option<Tagger> {
+    /// Create a new `Tagger`.
+    pub fn create_tagger<'a>(&'a self) -> Option<Tagger<'a>> {
+        // Safety: `mecab_model_new_tagger` requires `'tagger: 'self`, which is true because of this method's signature.
         unsafe {
             let inner = NonNull::new(crate::mecab_model_new_tagger(self.inner.as_ptr()))?;
 
