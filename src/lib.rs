@@ -37,31 +37,88 @@ pub const MECAB_ANY_BOUNDARY: i32 = 0;
 pub const MECAB_TOKEN_BOUNDARY: i32 = 1;
 pub const MECAB_INSIDE_TOKEN: i32 = 2;
 
+#[repr(C)]
+pub(crate) struct RawTagger {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+pub(crate) struct RawModel {
+    _private: [u8; 0],
+}
+
 #[link(name = "mecab")]
 extern "C" {
-    fn mecab_new2(arg: *const c_char) -> *mut c_void;
+    fn mecab_new2(arg: *const c_char) -> *mut RawTagger;
     fn mecab_version() -> *const c_char;
-    fn mecab_strerror(mecab: *mut c_void) -> *const c_char;
-    fn mecab_destroy(mecab: *mut c_void);
-    fn mecab_get_partial(mecab: *const c_void) -> c_int;
-    fn mecab_set_partial(mecab: *mut c_void, partial: c_int);
-    fn mecab_get_theta(mecab: *const c_void) -> c_float;
-    fn mecab_set_theta(mecab: *mut c_void, theta: c_float);
-    fn mecab_get_lattice_level(mecab: *const c_void) -> c_int;
-    fn mecab_set_lattice_level(mecab: *mut c_void, level: c_int);
-    fn mecab_get_all_morphs(mecab: *const c_void) -> c_int;
-    fn mecab_set_all_morphs(mecab: *mut c_void, all_morphs: c_int);
-    fn mecab_parse_lattice(mecab: *mut c_void, lattice: *mut c_void) -> c_int;
+
+    /// Return last error string.
+    /// @return error string
+    fn mecab_strerror(mecab: *mut RawTagger) -> *const c_char;
+
+    /// delete Tagger object.
+    /// This method calles "delete tagger".
+    /// In some environment, e.g., MS-Windows, an object allocated inside a DLL must be deleted in the same DLL too.
+    /// @param tagger tagger object
+    fn mecab_destroy(mecab: *mut RawTagger);
+
+    /// Return true if partial parsing mode is on.
+    /// This method is DEPRECATED. Use Lattice::has_request_type(MECAB_PARTIAL).
+    /// @return boolean
+    fn mecab_get_partial(mecab: *const RawTagger) -> c_int;
+
+    /// set partial parsing mode.
+    /// This method is DEPRECATED. Use Lattice::add_request_type(MECAB_PARTIAL) or Lattice::remove_request_type(MECAB_PARTIAL)
+    /// @param partial partial mode
+    fn mecab_set_partial(mecab: *mut RawTagger, partial: c_int);
+
+    /// Return temparature parameter theta.
+    /// @return temparature parameter.
+    fn mecab_get_theta(mecab: *const RawTagger) -> c_float;
+
+    /// Set temparature parameter theta.
+    /// @param theta temparature parameter.
+    fn mecab_set_theta(mecab: *mut RawTagger, theta: c_float);
+
+    /// Return lattice level.
+    /// This method is DEPRECATED. Use Lattice::*_request_type()
+    /// @return int lattice level
+    fn mecab_get_lattice_level(mecab: *const RawTagger) -> c_int;
+
+    /// Set lattice level.
+    /// This method is DEPRECATED. Use Lattice::*_request_type()
+    /// @param level lattice level
+    fn mecab_set_lattice_level(mecab: *mut RawTagger, level: c_int);
+
+    /// set all-morphs output mode.
+    /// This method is DEPRECATED. Use Lattice::add_request_type(MECAB_ALL_MORPHS) or Lattice::remove_request_type(MECAB_ALL_MORPHS)
+    /// @param all_morphs
+    fn mecab_get_all_morphs(mecab: *const RawTagger) -> c_int;
+
+    /// set all-morphs output mode.
+    /// This method is DEPRECATED. Use Lattice::add_request_type(MECAB_ALL_MORPHS) or Lattice::remove_request_type(MECAB_ALL_MORPHS)
+    /// @param all_morphs
+    fn mecab_set_all_morphs(mecab: *mut RawTagger, all_morphs: c_int);
+
+    /// Parse lattice object.
+    /// Return true if lattice is parsed successfully.
+    /// A sentence must be set to the lattice with Lattice:set_sentence object before calling this method.
+    /// Parsed node object can be obtained with Lattice:bos_node.
+    /// This method is thread safe.
+    /// @return lattice lattice object
+    /// @return boolean
+    fn mecab_parse_lattice(mecab: *const RawTagger, lattice: *mut c_void) -> c_int;
 
     /// Parse given sentence and return parsed result as string.
     /// You should not delete the returned string. The returned buffer
     /// is overwritten when parse method is called again.
     /// This method is NOT thread safe.
     #[allow(dead_code)] // keep the function here for documentation purposes.
-    fn mecab_sparse_tostr(mecab: *mut c_void, str: *const c_char) -> *const c_char;
+    fn mecab_sparse_tostr(mecab: *mut RawTagger, str: *const c_char) -> *const c_char;
 
     /// The same as `mecab_sparse_tostr`, but with input length (bytes) passed.
-    fn mecab_sparse_tostr2(mecab: *mut c_void, str: *const c_char, len: size_t) -> *const c_char;
+    fn mecab_sparse_tostr2(mecab: *mut RawTagger, str: *const c_char, len: size_t)
+        -> *const c_char;
 
     /// Parse given sentence and return Node object.
     /// You should not delete the returned node object. The returned buffer
@@ -71,11 +128,14 @@ extern "C" {
     /// @param str sentence
     /// @return bos node object
     #[allow(dead_code)] // keep the function here for documentation purposes.
-    fn mecab_sparse_tonode(mecab: *mut c_void, str: *const c_char) -> *const raw_node;
+    fn mecab_sparse_tonode(mecab: *mut RawTagger, str: *const c_char) -> *const raw_node;
 
     /// The same as parseToNode(), but input length can be passed
-    fn mecab_sparse_tonode2(mecab: *mut c_void, str: *const c_char, len: size_t)
-        -> *const raw_node;
+    fn mecab_sparse_tonode2(
+        mecab: *mut RawTagger,
+        str: *const c_char,
+        len: size_t,
+    ) -> *const raw_node;
 
     /// Parse given sentence and obtain N-best results as a string format.
     /// Currently, N must be 1 <= N <= 512 due to the limitation of the buffer size.
@@ -86,18 +146,19 @@ extern "C" {
     /// @param str sentence
     /// @return parsed result
     #[allow(dead_code)] // keep the function here for documentation purposes.
-    fn mecab_nbest_sparse_tostr(mecab: *mut c_void, N: size_t, str: *const c_char)
-        -> *const c_char;
+    fn mecab_nbest_sparse_tostr(
+        mecab: *mut RawTagger,
+        N: size_t,
+        str: *const c_char,
+    ) -> *const c_char;
 
-    ///
     /// The same as parseNBest(), but input length can be passed.
     /// @param N how many results you want to obtain
     /// @param str sentence
     /// @param len sentence length
     /// @return parsed result
-    ///
     fn mecab_nbest_sparse_tostr2(
-        mecab: *mut c_void,
+        mecab: *mut RawTagger,
         N: size_t,
         str: *const c_char,
         len: size_t,
@@ -111,34 +172,36 @@ extern "C" {
     /// @param str sentence
     /// @return boolean
     #[allow(dead_code)] // keep the function here for documentation purposes.
-    fn mecab_nbest_init(mecab: *mut c_void, str: *const c_char) -> c_int;
+    fn mecab_nbest_init(mecab: *mut RawTagger, str: *const c_char) -> c_int;
 
     /// The same as parseNBestInit(), but input length can be passed.
     /// @param str sentence
     /// @param len sentence length
     /// @return boolean
     /// @return parsed result
-    fn mecab_nbest_init2(mecab: *mut c_void, str: *const c_char, len: size_t) -> c_int;
+    fn mecab_nbest_init2(mecab: *mut RawTagger, str: *const c_char, len: size_t) -> c_int;
 
     /// Return next-best parsed result. You must call parseNBestInit() in advance.
     /// Return NULL if no more reuslts are available.
     /// This method is NOT thread safe.
     /// This method is DEPRECATED. Use Lattice class.
     /// @return parsed result
-    fn mecab_nbest_next_tostr(mecab: *mut c_void) -> *const c_char;
+    fn mecab_nbest_next_tostr(mecab: *mut RawTagger) -> *const c_char;
 
     /// Return next-best parsed result. You must call parseNBestInit() in advance.
     /// Return NULL if no more reuslt is available.
     /// This method is NOT thread safe.
     /// This method is DEPRECATED. Use Lattice class.
     /// @return node object
-    fn mecab_nbest_next_tonode(mecab: *mut c_void) -> *const raw_node;
+    fn mecab_nbest_next_tonode(mecab: *mut RawTagger) -> *const raw_node;
 
-    fn mecab_format_node(mecab: *mut c_void, node: *const raw_node) -> *const c_char;
+    fn mecab_format_node(mecab: *mut RawTagger, node: *const Node2) -> *const c_char;
 
     /// Return DictionaryInfo linked list.
     /// @return DictionaryInfo linked list
-    fn mecab_dictionary_info(mecab: *const c_void) -> *const dictionary_info_t;
+    /// Safety:
+    /// Rust has no way of knowing weather the inferred lifetime is correct.
+    fn mecab_dictionary_info<'a>(mecab: *const RawTagger) -> *const DictionaryInfo<'a>;
 
     fn mecab_lattice_new() -> *mut c_void;
     fn mecab_lattice_destroy(lattice: *mut c_void);
@@ -186,15 +249,15 @@ extern "C" {
     /// cause of the errors.
     /// @return new Model object
     /// @param arg single string representation of the argment.
-    fn mecab_model_new2(arg: *const c_char) -> *mut c_void;
-    fn mecab_model_destroy(model: *mut c_void);
+    fn mecab_model_new2(arg: *const c_char) -> *mut RawModel;
+    fn mecab_model_destroy(model: *mut RawModel);
 
     /// Create a new Tagger object.
     /// All returned tagger object shares this model object as a parsing model.
     /// Never delete this model object before deleting tagger object.
     /// @return new Tagger object
-    fn mecab_model_new_tagger(model: *const c_void) -> *mut c_void;
-    fn mecab_model_new_lattice(model: *mut c_void) -> *mut c_void;
+    fn mecab_model_new_tagger(model: *const RawModel) -> *mut RawTagger;
+    fn mecab_model_new_lattice(model: *mut RawModel) -> *mut c_void;
 
     /// Swap the instance with |model|.
     /// The ownership of |model| always moves to this instance,
@@ -205,23 +268,33 @@ extern "C" {
     /// No need to stop the parsing thread excplicitly before swapping model object.
     /// @return boolean
     /// @param model new model which is going to be swapped with the current model.
-    fn mecab_model_swap(model: *mut c_void, new_model: *mut c_void) -> c_int;
+    fn mecab_model_swap(model: *mut RawModel, new_model: *mut RawModel) -> c_int;
 
     /// Return DictionaryInfo linked list.
     /// @return DictionaryInfo linked list
-    fn mecab_model_dictionary_info(model: *const c_void) -> *const dictionary_info_t;
+    /// Safety:
+    /// Rust has no way of knowing weather the inferred lifetime is correct.
+    fn mecab_model_dictionary_info<'a>(model: *const RawModel) -> *const DictionaryInfo<'a>;
 
-    fn mecab_model_transition_cost(model: *mut c_void, rcAttr: c_ushort, lcAttr: c_ushort)
-        -> c_int;
+    /// Return transtion cost from rcAttr to lcAttr.
+    /// @return transtion cost
+    fn mecab_model_transition_cost(
+        model: *const RawModel,
+        rcAttr: c_ushort,
+        lcAttr: c_ushort,
+    ) -> c_int;
+
     fn mecab_model_lookup(
-        model: *mut c_void,
+        model: *mut RawModel,
         begin: *const c_char,
         end: *const c_char,
         lattice: *mut c_void,
     ) -> *const raw_node;
 }
 
+use dictionary::DictionaryInfo;
 pub use model::Model;
+use node::Node2;
 pub use tagger::Tagger;
 
 // todo: it seems that mecab just uses a `static` string here, so we can probably return a `&'static str`
@@ -234,7 +307,7 @@ pub fn version() -> String {
 /// `mecab` must be a valid reference *or* a null pointer.
 /// `mecab` must be uniquely referenced for at least the chosen lifetime `'a`
 /// Note: For a null pointer it isn't clear how long the reference should be valid, this is a possible source of unsoundness.
-unsafe fn last_error<'a>(mecab: *mut c_void) -> Option<&'a CStr> {
+unsafe fn last_error<'a>(mecab: *mut RawTagger) -> Option<&'a CStr> {
     let err = mecab_strerror(mecab);
     if !err.is_null() {
         Some(CStr::from_ptr(err))
@@ -247,9 +320,7 @@ pub fn global_last_error() -> Option<CString> {
     // safety: `ptr::null_mut` is a valid input to this function.
     // there *might* be a soundness issue with having the returned reference at all (including when and before it was created.)
     unsafe {
-        last_error(ptr::null_mut())
-            .filter(|s| !s.to_bytes().is_empty())
-            .map(ToOwned::to_owned)
+        last_error(ptr::null_mut()).filter(|s| !s.to_bytes().is_empty()).map(ToOwned::to_owned)
     }
 }
 pub struct Lattice {
@@ -259,12 +330,7 @@ pub struct Lattice {
 
 impl Lattice {
     pub fn new() -> Lattice {
-        unsafe {
-            Lattice {
-                inner: mecab_lattice_new(),
-                input: ptr::null(),
-            }
-        }
+        unsafe { Lattice { inner: mecab_lattice_new(), input: ptr::null() } }
     }
 
     // UB: drops self.input without borrow
@@ -577,10 +643,7 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_prev(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::PREV,
-        }
+        NodeIter { current: Some(self), mode: Mode::PREV }
     }
 
     pub fn prev(&self) -> Option<Node<'a>> {
@@ -588,10 +651,7 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_next(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::NEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::NEXT }
     }
 
     pub fn next(&self) -> Option<Node<'a>> {
@@ -599,10 +659,7 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_enext(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::ENEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::ENEXT }
     }
 
     pub fn enext(&self) -> Option<Node<'a>> {
@@ -610,27 +667,12 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_bnext(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::BNEXT,
-        }
+        NodeIter { current: Some(self), mode: Mode::BNEXT }
     }
 
     pub fn bnext(&self) -> Option<Node<'a>> {
         Node::from_raw(self.inner.bnext)
     }
-}
-
-#[repr(C)]
-struct dictionary_info_t {
-    filename: *const c_char,
-    charset: *const c_char,
-    size: c_uint,
-    dict_type: c_int,
-    lsize: c_uint,
-    rsize: c_uint,
-    version: c_ushort,
-    next: *mut dictionary_info_t,
 }
 
 fn str_to_ptr(input: &CString) -> *const i8 {

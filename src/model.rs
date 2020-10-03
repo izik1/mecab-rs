@@ -1,20 +1,18 @@
 use std::{
-    ffi::{c_void, CString},
+    ffi::CString,
     mem::ManuallyDrop,
     ptr::{self, NonNull},
 };
 
-use crate::{dictionary::DictionaryInfo, Lattice, Node, Tagger};
+use crate::{dictionary::DictionaryInfo, Lattice, Node, RawModel, Tagger};
 
 pub struct Model {
-    inner: NonNull<c_void>,
+    inner: NonNull<RawModel>,
 }
 
 impl Model {
     /// Factory method to create a new Model with a string parameter representation, i.e.,
     /// "-d /user/local/mecab/dic/ipadic -Ochasen".
-    /// Return NULL if new model cannot be initialized. Use MeCab::getLastError() to obtain the
-    /// cause of the errors.
     pub fn new(args: &str) -> Result<Model, Option<CString>> {
         unsafe {
             let inner = NonNull::new(crate::mecab_model_new2(crate::str_to_ptr(

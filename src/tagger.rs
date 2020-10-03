@@ -1,11 +1,11 @@
 use std::{
-    ffi::{c_void, CStr, CString},
+    ffi::{CStr, CString},
     marker::PhantomData,
     os::raw::c_char,
     ptr::NonNull,
 };
 
-use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, Model};
+use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, Model, RawTagger};
 
 /// # Panics
 /// If the given CStr ends up not being a valid UTF-8 string
@@ -18,7 +18,7 @@ fn map_res_str<'a>(res: Result<&'a CStr, Option<&'a CStr>>) -> Result<&'a str, O
 }
 
 pub struct Tagger<'a> {
-    inner: NonNull<c_void>,
+    inner: NonNull<RawTagger>,
     phantom: PhantomData<Option<&'a Model>>,
 }
 
@@ -29,19 +29,15 @@ impl Tagger<'static> {
     // todo: fix memory leak
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Self, Option<CString>> {
         unsafe {
-            let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
-                &CString::new(arg).unwrap(),
-            )));
+            let inner =
+                NonNull::new(crate::mecab_new2(crate::str_to_ptr(&CString::new(arg).unwrap())));
 
             let inner = match inner {
                 Some(inner) => inner,
                 None => return Err(crate::global_last_error()),
             };
 
-            Ok(Self {
-                inner,
-                phantom: PhantomData,
-            })
+            Ok(Self { inner, phantom: PhantomData })
         }
     }
 }
@@ -50,11 +46,8 @@ impl<'t> Tagger<'t> {
     /// # Safety
     /// This function assumes that `inner` is a valid pointer to a mecab object.
     /// Additionally, it cannot ensure that the lifetime it's valid for is the proper lifetime.
-    pub(crate) unsafe fn from_ptr(raw: NonNull<c_void>) -> Self {
-        Self {
-            inner: raw,
-            phantom: PhantomData,
-        }
+    pub(crate) unsafe fn from_ptr(raw: NonNull<RawTagger>) -> Self {
+        Self { inner: raw, phantom: PhantomData }
     }
 
     /// uses a unique reference to `self` to get the last error reported.
@@ -302,10 +295,7 @@ impl<'t> Tagger<'t> {
 
         match res {
             false => Err(self.last_error_ref()),
-            true => Ok(NBest {
-                tagger: self,
-                _input: PhantomData,
-            }),
+            true => Ok(NBest { tagger: self, _input: PhantomData }),
         }
     }
 
@@ -320,9 +310,7 @@ impl<'t> Tagger<'t> {
         &'a mut self,
         node: &Node2,
     ) -> Result<&'a CStr, Option<&'a CStr>> {
-        let res = unsafe {
-            crate::mecab_format_node(self.inner.as_ptr(), node as *const Node2 as *const _)
-        };
+        let res = unsafe { crate::mecab_format_node(self.inner.as_ptr(), node as *const Node2) };
 
         match res.is_null() {
             true => Err(self.last_error_ref()),
@@ -340,7 +328,7 @@ impl<'t> Tagger<'t> {
 
     /// Return DictionaryInfo linked list.
     pub fn dictionary_info<'a>(&'a self) -> &'a DictionaryInfo<'a> {
-        unsafe { &*(crate::mecab_dictionary_info(self.inner.as_ptr()) as *const DictionaryInfo) }
+        unsafe { &*(crate::mecab_dictionary_info(self.inner.as_ptr())) }
     }
 }
 
@@ -378,10 +366,7 @@ impl<'a> NBest<'a, '_> {
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
     pub fn next_str(&mut self) -> Option<&str> {
-        self.next_cstr()
-            .map(CStr::to_str)
-            .transpose()
-            .expect("String was not valid UTF-8")
+        self.next_cstr().map(CStr::to_str).transpose().expect("String was not valid UTF-8")
     }
 
     pub fn next_node(&mut self) -> Option<&'a Node2<'a>> {
