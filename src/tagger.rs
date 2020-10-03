@@ -31,6 +31,7 @@ impl Tagger {
         Self { inner: raw }
     }
 
+    // todo: fix memory leak
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Tagger, Option<CString>> {
         unsafe {
             let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
