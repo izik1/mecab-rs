@@ -1,5 +1,6 @@
 use std::{
     ffi::{c_void, CString},
+    mem::ManuallyDrop,
     ptr::{self, NonNull},
 };
 
@@ -56,9 +57,23 @@ impl Model {
     /// This method is thread safe. All taggers created by
     /// `Model::create_tagger` will also be updated asynchronously.
     /// No need to stop the parsing thread excplicitly before swapping model object.
-    // todo: probably unsound
-    pub fn swap(&self, model: Model) -> bool {
-        unsafe { crate::mecab_model_swap(self.inner.as_ptr(), model.inner.as_ptr()) != 0 }
+    /// # Errors
+    /// If the mecab method in the background fails. (in which case we return the model back)
+    // todo: replace type with `Result<(), (&'a CStr, Model)>`
+    pub fn swap(&self, model: Model) -> Result<(), Model> {
+        // use ManuallyDrop here for panic safety. (n.b. from what possible panics?)
+        let model = ManuallyDrop::new(model);
+        let success =
+            unsafe { crate::mecab_model_swap(self.inner.as_ptr(), model.inner.as_ptr()) != 0 };
+
+        if success {
+            // `model` is now invalid, and we no-longer need to run `drop` on it.
+            Ok(())
+        } else {
+            // `model` is still valid, so, allow the caller to save it.
+            let model = ManuallyDrop::into_inner(model);
+            Err(model)
+        }
     }
 
     /// Return DictionaryInfo linked list.

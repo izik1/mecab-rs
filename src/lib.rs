@@ -195,6 +195,16 @@ extern "C" {
     /// @return new Tagger object
     fn mecab_model_new_tagger(model: *const c_void) -> *mut c_void;
     fn mecab_model_new_lattice(model: *mut c_void) -> *mut c_void;
+
+    /// Swap the instance with |model|.
+    /// The ownership of |model| always moves to this instance,
+    /// meaning that passed |model| will no longer be accessible after calling this method.
+    /// return true if new model is swapped successfully.
+    /// This method is thread safe. All taggers created by
+    /// Model::createTagger() method will also be updated asynchronously.
+    /// No need to stop the parsing thread excplicitly before swapping model object.
+    /// @return boolean
+    /// @param model new model which is going to be swapped with the current model.
     fn mecab_model_swap(model: *mut c_void, new_model: *mut c_void) -> c_int;
 
     /// Return DictionaryInfo linked list.
