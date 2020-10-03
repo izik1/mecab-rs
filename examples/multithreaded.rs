@@ -100,12 +100,12 @@ fn main() {
 
     // dictionary info
     for dict in model.dictionary_info().iter() {
-        println!("\nfilename: {}", dict.filename);
-        println!("charset: {}", dict.charset);
-        println!("size: {}", dict.size);
-        println!("type: {}", dict.dict_type);
-        println!("lsize: {}", dict.lsize);
-        println!("rsize: {}", dict.rsize);
-        println!("version: {}", dict.version);
+        println!("\nfilename: {}", dict.filename());
+        println!("charset: {}", dict.charset());
+        println!("size: {}", dict.size());
+        println!("type: {}", dict.dict_type());
+        println!("lsize: {}", dict.left_attrs_size());
+        println!("rsize: {}", dict.right_attrs_size());
+        println!("version: {}", dict.version());
     }
 }

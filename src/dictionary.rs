@@ -91,7 +91,9 @@ impl<'a> DictionaryInfo<'a> {
 
     /// Returns an iterator of `&self`
     pub fn iter(&self) -> DictIter<'_> {
-        DictIter { current: Some(self) }
+        DictIter {
+            current: Some(self),
+        }
     }
 }
 

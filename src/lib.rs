@@ -135,7 +135,10 @@ extern "C" {
     fn mecab_nbest_next_tonode(mecab: *mut c_void) -> *const raw_node;
 
     fn mecab_format_node(mecab: *mut c_void, node: *const raw_node) -> *const c_char;
-    fn mecab_dictionary_info(mecab: *mut c_void) -> *const dictionary_info_t;
+
+    /// Return DictionaryInfo linked list.
+    /// @return DictionaryInfo linked list
+    fn mecab_dictionary_info(mecab: *const c_void) -> *const dictionary_info_t;
 
     fn mecab_lattice_new() -> *mut c_void;
     fn mecab_lattice_destroy(lattice: *mut c_void);
@@ -188,7 +191,11 @@ extern "C" {
     fn mecab_model_new_tagger(model: *mut c_void) -> *mut c_void;
     fn mecab_model_new_lattice(model: *mut c_void) -> *mut c_void;
     fn mecab_model_swap(model: *mut c_void, new_model: *mut c_void) -> c_int;
-    fn mecab_model_dictionary_info(model: *mut c_void) -> *const dictionary_info_t;
+
+    /// Return DictionaryInfo linked list.
+    /// @return DictionaryInfo linked list
+    fn mecab_model_dictionary_info(model: *const c_void) -> *const dictionary_info_t;
+
     fn mecab_model_transition_cost(model: *mut c_void, rcAttr: c_ushort, lcAttr: c_ushort)
         -> c_int;
     fn mecab_model_lookup(
@@ -609,67 +616,6 @@ struct dictionary_info_t {
     rsize: c_uint,
     version: c_ushort,
     next: *mut dictionary_info_t,
-}
-
-pub struct DictIter {
-    current: Option<DictionaryInfo>,
-}
-
-impl Iterator for DictIter {
-    type Item = DictionaryInfo;
-
-    fn next(&mut self) -> Option<DictionaryInfo> {
-        let old = self.current.take()?;
-
-        self.current = old.next();
-
-        Some(old)
-    }
-}
-
-#[derive(Clone)]
-pub struct DictionaryInfo {
-    pub filename: String,
-    pub charset: String,
-    pub size: u32,
-    pub dict_type: i32,
-    pub lsize: u32,
-    pub rsize: u32,
-    pub version: u16,
-    next: *mut dictionary_info_t,
-}
-
-impl DictionaryInfo {
-    fn new(raw_ptr: *const dictionary_info_t) -> DictionaryInfo {
-        unsafe {
-            let dict = &*raw_ptr;
-
-            DictionaryInfo {
-                next: dict.next,
-                filename: ptr_to_string(dict.filename),
-                charset: ptr_to_string(dict.charset),
-                size: dict.size,
-                dict_type: dict.dict_type,
-                lsize: dict.lsize,
-                rsize: dict.rsize,
-                version: dict.version,
-            }
-        }
-    }
-
-    pub fn iter(self) -> DictIter {
-        DictIter {
-            current: Some(self),
-        }
-    }
-
-    fn next(&self) -> Option<DictionaryInfo> {
-        if !self.next.is_null() {
-            Some(DictionaryInfo::new(self.next))
-        } else {
-            None
-        }
-    }
 }
 
 fn str_to_ptr(input: &CString) -> *const i8 {

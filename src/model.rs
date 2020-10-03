@@ -3,7 +3,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use crate::{DictionaryInfo, Lattice, Node, Tagger};
+use crate::{dictionary::DictionaryInfo, Lattice, Node, Tagger};
 
 pub struct Model {
     inner: NonNull<c_void>,
@@ -60,9 +60,11 @@ impl Model {
         unsafe { crate::mecab_model_swap(self.inner.as_ptr(), model.inner.as_ptr()) != 0 }
     }
 
-    // todo: probably unsound
-    pub fn dictionary_info(&self) -> DictionaryInfo {
-        unsafe { DictionaryInfo::new(crate::mecab_model_dictionary_info(self.inner.as_ptr())) }
+    /// Return DictionaryInfo linked list.
+    pub fn dictionary_info<'a>(&'a self) -> &'a DictionaryInfo<'a> {
+        unsafe {
+            &*(crate::mecab_model_dictionary_info(self.inner.as_ptr()) as *const DictionaryInfo)
+        }
     }
 
     // todo: probably unsound
