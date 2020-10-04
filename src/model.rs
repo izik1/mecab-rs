@@ -81,7 +81,7 @@ impl Model {
         }
     }
 
-    // todo: probably unsound
+    /// Return the transtion cost from rcAttr to lcAttr.
     pub fn transition_cost(&self, rc_attr: u16, lc_attr: u16) -> i32 {
         unsafe { crate::mecab_model_transition_cost(self.inner.as_ptr(), rc_attr, lc_attr) }
     }
