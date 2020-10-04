@@ -250,6 +250,11 @@ extern "C" {
     /// @return new Model object
     /// @param arg single string representation of the argment.
     fn mecab_model_new2(arg: *const c_char) -> *mut RawModel;
+
+    /// delete Model object.
+    /// This method calles "delete model".
+    /// In some environment, e.g., MS-Windows, an object allocated inside a DLL must be deleted in the same DLL too.
+    /// @param model model object
     fn mecab_model_destroy(model: *mut RawModel);
 
     /// Create a new Tagger object.
@@ -320,7 +325,9 @@ pub fn global_last_error() -> Option<CString> {
     // safety: `ptr::null_mut` is a valid input to this function.
     // there *might* be a soundness issue with having the returned reference at all (including when and before it was created.)
     unsafe {
-        last_error(ptr::null_mut()).filter(|s| !s.to_bytes().is_empty()).map(ToOwned::to_owned)
+        last_error(ptr::null_mut())
+            .filter(|s| !s.to_bytes().is_empty())
+            .map(ToOwned::to_owned)
     }
 }
 pub struct Lattice {
@@ -330,7 +337,12 @@ pub struct Lattice {
 
 impl Lattice {
     pub fn new() -> Lattice {
-        unsafe { Lattice { inner: mecab_lattice_new(), input: ptr::null() } }
+        unsafe {
+            Lattice {
+                inner: mecab_lattice_new(),
+                input: ptr::null(),
+            }
+        }
     }
 
     // UB: drops self.input without borrow
@@ -643,7 +655,10 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_prev(self) -> NodeIter<'a> {
-        NodeIter { current: Some(self), mode: Mode::PREV }
+        NodeIter {
+            current: Some(self),
+            mode: Mode::PREV,
+        }
     }
 
     pub fn prev(&self) -> Option<Node<'a>> {
@@ -651,7 +666,10 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_next(self) -> NodeIter<'a> {
-        NodeIter { current: Some(self), mode: Mode::NEXT }
+        NodeIter {
+            current: Some(self),
+            mode: Mode::NEXT,
+        }
     }
 
     pub fn next(&self) -> Option<Node<'a>> {
@@ -659,7 +677,10 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_enext(self) -> NodeIter<'a> {
-        NodeIter { current: Some(self), mode: Mode::ENEXT }
+        NodeIter {
+            current: Some(self),
+            mode: Mode::ENEXT,
+        }
     }
 
     pub fn enext(&self) -> Option<Node<'a>> {
@@ -667,7 +688,10 @@ impl<'a> Node<'a> {
     }
 
     pub fn iter_bnext(self) -> NodeIter<'a> {
-        NodeIter { current: Some(self), mode: Mode::BNEXT }
+        NodeIter {
+            current: Some(self),
+            mode: Mode::BNEXT,
+        }
     }
 
     pub fn bnext(&self) -> Option<Node<'a>> {
