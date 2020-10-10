@@ -6,11 +6,9 @@ pub mod node;
 mod tagger;
 
 use std::{
-    default::Default,
     ffi::{CStr, CString},
     os::raw::*,
-    ptr::{self, NonNull},
-    str,
+    ptr, str,
 };
 
 type size_t = usize;
@@ -42,11 +40,13 @@ pub(crate) struct RawTagger {
     _private: [u8; 0],
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub(crate) struct RawModel {
     _private: [u8; 0],
 }
 
+#[allow(dead_code)]
 #[link(name = "mecab")]
 extern "C" {
     fn mecab_new2(arg: *const c_char) -> *mut RawTagger;
@@ -128,14 +128,14 @@ extern "C" {
     /// @param str sentence
     /// @return bos node object
     #[allow(dead_code)] // keep the function here for documentation purposes.
-    fn mecab_sparse_tonode(mecab: *mut RawTagger, str: *const c_char) -> *const raw_node;
+    fn mecab_sparse_tonode<'a>(mecab: *mut RawTagger, str: *const c_char) -> *const Node<'a>;
 
     /// The same as parseToNode(), but input length can be passed
-    fn mecab_sparse_tonode2(
+    fn mecab_sparse_tonode2<'a>(
         mecab: *mut RawTagger,
         str: *const c_char,
         len: size_t,
-    ) -> *const raw_node;
+    ) -> *const Node<'a>;
 
     /// Parse given sentence and obtain N-best results as a string format.
     /// Currently, N must be 1 <= N <= 512 due to the limitation of the buffer size.
@@ -193,9 +193,9 @@ extern "C" {
     /// This method is NOT thread safe.
     /// This method is DEPRECATED. Use Lattice class.
     /// @return node object
-    fn mecab_nbest_next_tonode(mecab: *mut RawTagger) -> *const raw_node;
+    fn mecab_nbest_next_tonode<'a>(mecab: *mut RawTagger) -> *const Node<'a>;
 
-    fn mecab_format_node(mecab: *mut RawTagger, node: *const Node2) -> *const c_char;
+    fn mecab_format_node(mecab: *mut RawTagger, node: *const Node) -> *const c_char;
 
     /// Return DictionaryInfo linked list.
     /// @return DictionaryInfo linked list
@@ -207,10 +207,10 @@ extern "C" {
     fn mecab_lattice_destroy(lattice: *mut c_void);
     fn mecab_lattice_clear(lattice: *mut c_void);
     fn mecab_lattice_is_available(lattice: *mut c_void) -> c_int;
-    fn mecab_lattice_get_bos_node(lattice: *mut c_void) -> *mut raw_node;
-    fn mecab_lattice_get_eos_node(lattice: *mut c_void) -> *mut raw_node;
-    fn mecab_lattice_get_begin_nodes(lattice: *mut c_void, pos: size_t) -> *const raw_node;
-    fn mecab_lattice_get_end_nodes(lattice: *mut c_void, pos: size_t) -> *const raw_node;
+    fn mecab_lattice_get_bos_node<'a>(lattice: *mut c_void) -> *const Node<'a>;
+    fn mecab_lattice_get_eos_node<'a>(lattice: *mut c_void) -> *const Node<'a>;
+    fn mecab_lattice_get_begin_nodes<'a>(lattice: *mut c_void, pos: size_t) -> *const Node<'a>;
+    fn mecab_lattice_get_end_nodes<'a>(lattice: *mut c_void, pos: size_t) -> *const Node<'a>;
     fn mecab_lattice_get_sentence(lattice: *mut c_void) -> *const c_char;
     fn mecab_lattice_set_sentence(lattice: *mut c_void, sentence: *const c_char);
     fn mecab_lattice_get_size(lattice: *mut c_void) -> size_t;
@@ -289,17 +289,17 @@ extern "C" {
         lcAttr: c_ushort,
     ) -> c_int;
 
-    fn mecab_model_lookup(
+    fn mecab_model_lookup<'a>(
         model: *mut RawModel,
         begin: *const c_char,
         end: *const c_char,
         lattice: *mut c_void,
-    ) -> *const raw_node;
+    ) -> *const Node<'a>;
 }
 
 use dictionary::DictionaryInfo;
 // pub use model::Model;
-use node::Node2;
+use node::Node;
 pub use tagger::Tagger;
 
 // todo: it seems that mecab just uses a `static` string here, so we can probably return a `&'static str`
@@ -330,381 +330,9 @@ pub fn global_last_error() -> Option<CString> {
             .map(ToOwned::to_owned)
     }
 }
-pub struct Lattice {
-    inner: *mut c_void,
-    input: *const i8,
-}
-
-impl Lattice {
-    pub fn new() -> Lattice {
-        unsafe {
-            Lattice {
-                inner: mecab_lattice_new(),
-                input: ptr::null(),
-            }
-        }
-    }
-
-    // UB: drops self.input without borrow
-    // UB: drops self.input while "something" requiring it may still be alive.
-    fn free_input(&self) {
-        unsafe {
-            if !self.input.is_null() {
-                CString::from_raw(self.input as *mut i8);
-            }
-        }
-    }
-
-    pub fn clear(&self) {
-        unsafe {
-            mecab_lattice_clear(self.inner);
-            self.free_input();
-        }
-    }
-
-    pub fn is_available(&self) -> bool {
-        unsafe { mecab_lattice_is_available(self.inner) != 0 }
-    }
-
-    pub fn bos_node<'a>(&'a self) -> Node<'a> {
-        unsafe {
-            Node::from_raw(mecab_lattice_get_bos_node(self.inner))
-                .expect("BOS node should always be valid")
-        }
-    }
-
-    pub fn eos_node<'a>(&'a self) -> Node<'a> {
-        unsafe {
-            Node::from_raw(mecab_lattice_get_eos_node(self.inner))
-                .expect("EOS node should always be valid")
-        }
-    }
-
-    pub fn begin_nodes<'a>(&'a self, pos: usize) -> Option<Node<'a>> {
-        unsafe {
-            let raw_node = mecab_lattice_get_begin_nodes(self.inner, pos);
-            Node::from_raw(raw_node)
-        }
-    }
-
-    pub fn end_nodes<'a>(&'a self, pos: usize) -> Option<Node<'a>> {
-        unsafe {
-            let raw_node = mecab_lattice_get_end_nodes(self.inner, pos);
-            Node::from_raw(raw_node)
-        }
-    }
-
-    pub fn sentence(&self) -> String {
-        unsafe { ptr_to_string(mecab_lattice_get_sentence(self.inner)) }
-    }
-
-    pub fn set_sentence<T: Into<Vec<u8>>>(&mut self, sentence: T) {
-        unsafe {
-            self.free_input();
-            self.input = str_to_heap_ptr(sentence);
-            mecab_lattice_set_sentence(self.inner, self.input);
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        unsafe { mecab_lattice_get_size(self.inner) }
-    }
-
-    pub fn z(&self) -> f64 {
-        unsafe { mecab_lattice_get_z(self.inner) }
-    }
-
-    pub fn set_z(&self, z: f64) {
-        unsafe {
-            mecab_lattice_set_z(self.inner, z);
-        }
-    }
-
-    pub fn theta(&self) -> f64 {
-        unsafe { mecab_lattice_get_theta(self.inner) }
-    }
-
-    pub fn set_theta(&self, theta: f64) {
-        unsafe {
-            mecab_lattice_set_theta(self.inner, theta);
-        }
-    }
-
-    pub fn next(&self) -> bool {
-        unsafe { mecab_lattice_next(self.inner) != 0 }
-    }
-
-    pub fn request_type(&self) -> i32 {
-        unsafe { mecab_lattice_get_request_type(self.inner) }
-    }
-
-    pub fn has_request_type(&self, request_type: i32) -> bool {
-        unsafe { mecab_lattice_has_request_type(self.inner, request_type) != 0 }
-    }
-
-    pub fn set_request_type(&self, request_type: i32) {
-        unsafe {
-            mecab_lattice_set_request_type(self.inner, request_type);
-        }
-    }
-
-    pub fn add_request_type(&self, request_type: i32) {
-        unsafe {
-            mecab_lattice_add_request_type(self.inner, request_type);
-        }
-    }
-
-    pub fn remove_request_type(&self, request_type: i32) {
-        unsafe {
-            mecab_lattice_remove_request_type(self.inner, request_type);
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        unsafe { ptr_to_string(mecab_lattice_tostr(self.inner)) }
-    }
-
-    pub fn enum_nbest_as_string(&self, n: i64) -> String {
-        unsafe { ptr_to_string(mecab_lattice_nbest_tostr(self.inner, n)) }
-    }
-
-    pub fn has_constraint(&self) -> bool {
-        unsafe { mecab_lattice_has_constraint(self.inner) != 0 }
-    }
-
-    pub fn boundary_constraint(&self, pos: u64) -> i32 {
-        unsafe { mecab_lattice_get_boundary_constraint(self.inner, pos) }
-    }
-
-    pub fn feature_constraint(&self, pos: u64) -> String {
-        unsafe { ptr_to_string(mecab_lattice_get_feature_constraint(self.inner, pos)) }
-    }
-
-    pub fn set_boundary_constraint(&self, pos: u64, boundary_type: i32) {
-        unsafe {
-            mecab_lattice_set_boundary_constraint(self.inner, pos, boundary_type);
-        }
-    }
-
-    pub fn set_feature_constraint<T: Into<Vec<u8>>>(
-        &self,
-        begin_pos: u64,
-        end_pos: u64,
-        feature: T,
-    ) {
-        unsafe {
-            mecab_lattice_set_feature_constraint(
-                self.inner,
-                begin_pos,
-                end_pos,
-                str_to_ptr(&CString::new(feature).unwrap()),
-            );
-        }
-    }
-
-    pub fn set_result<T: Into<Vec<u8>>>(&self, result: T) {
-        unsafe { mecab_lattice_set_result(self.inner, str_to_ptr(&CString::new(result).unwrap())) }
-    }
-
-    pub fn what(&self) -> String {
-        unsafe { ptr_to_string(mecab_lattice_strerror(self.inner)) }
-    }
-}
-
-impl Drop for Lattice {
-    fn drop(&mut self) {
-        unsafe {
-            mecab_lattice_destroy(self.inner);
-            self.free_input();
-        }
-    }
-}
-
-impl Default for Lattice {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[repr(C)]
-struct raw_node {
-    prev: *mut raw_node,
-    next: *mut raw_node,
-    enext: *mut raw_node,
-    bnext: *mut raw_node,
-    rpath: *mut c_void,
-    lpath: *mut c_void,
-    surface: *const c_char,
-    feature: *const c_char,
-    id: c_uint,
-    length: c_ushort,
-    rlength: c_ushort,
-    rcattr: c_ushort,
-    lcattr: c_ushort,
-    posid: c_ushort,
-    char_type: c_uchar,
-    stat: c_uchar,
-    isbest: c_uchar,
-    alpha: c_float,
-    beta: c_float,
-    prob: c_float,
-    wcost: c_short,
-    cost: c_long,
-}
-
-enum Mode {
-    NEXT,
-    PREV,
-    ENEXT,
-    BNEXT,
-}
-
-pub struct NodeIter<'a> {
-    current: Option<Node<'a>>,
-    mode: Mode,
-}
-
-impl<'a> Iterator for NodeIter<'a> {
-    type Item = Node<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let old = self.current.take()?;
-
-        self.current = match self.mode {
-            Mode::NEXT => old.next(),
-            Mode::PREV => old.prev(),
-            Mode::ENEXT => old.enext(),
-            Mode::BNEXT => old.bnext(),
-        };
-
-        Some(old)
-    }
-}
-
-#[derive(Clone)]
-pub struct Node<'a> {
-    inner: &'a raw_node,
-
-    pub id: u32,
-    pub length: u16,
-    pub rlength: u16,
-    pub rcattr: u16,
-    pub lcattr: u16,
-    pub posid: u16,
-    pub char_type: u8,
-    pub stat: u8,
-    pub isbest: bool,
-    pub alpha: f32,
-    pub beta: f32,
-    pub prob: f32,
-    pub wcost: i16,
-    // use long instead of Rust integer as its size may by different
-    pub cost: c_long,
-}
-
-impl<'a> Node<'a> {
-    #[inline]
-    pub fn surface(&self) -> &'a str {
-        // Safety: Safe because we validate the utf-8 when initializing.
-        unsafe { str::from_utf8_unchecked(CStr::from_ptr(self.inner.surface).to_bytes()) }
-    }
-
-    /// The part of surface covered by *this* node.
-    #[inline]
-    pub fn visible(&self) -> &'a str {
-        &self.surface()[..self.length as usize]
-    }
-
-    #[inline]
-    pub fn feature(&self) -> &'a str {
-        // Safety: Safe because we validate the utf-8 when initializing.
-        unsafe { str::from_utf8_unchecked(CStr::from_ptr(self.inner.feature).to_bytes()) }
-    }
-
-    fn from_raw(raw_ptr: *const raw_node) -> Option<Self> {
-        unsafe {
-            let raw_ptr = NonNull::new(raw_ptr as *mut _)?;
-            let raw_node: &raw_node = &*raw_ptr.as_ptr();
-
-            if !validate_str(raw_node.surface) {
-                return None;
-            }
-
-            if !validate_str(raw_node.feature) {
-                return None;
-            }
-
-            Some(Node {
-                inner: raw_node,
-                id: raw_node.id,
-                length: raw_node.length,
-                rlength: raw_node.rlength,
-                rcattr: raw_node.rcattr,
-                lcattr: raw_node.lcattr,
-                posid: raw_node.posid,
-                char_type: raw_node.char_type,
-                stat: raw_node.stat,
-                isbest: raw_node.isbest != 0,
-                alpha: raw_node.alpha,
-                beta: raw_node.beta,
-                prob: raw_node.prob,
-                wcost: raw_node.wcost,
-                cost: raw_node.cost,
-            })
-        }
-    }
-
-    pub fn iter_prev(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::PREV,
-        }
-    }
-
-    pub fn prev(&self) -> Option<Node<'a>> {
-        Node::from_raw(self.inner.prev)
-    }
-
-    pub fn iter_next(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::NEXT,
-        }
-    }
-
-    pub fn next(&self) -> Option<Node<'a>> {
-        Node::from_raw(self.inner.next)
-    }
-
-    pub fn iter_enext(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::ENEXT,
-        }
-    }
-
-    pub fn enext(&self) -> Option<Node<'a>> {
-        Node::from_raw(self.inner.enext)
-    }
-
-    pub fn iter_bnext(self) -> NodeIter<'a> {
-        NodeIter {
-            current: Some(self),
-            mode: Mode::BNEXT,
-        }
-    }
-
-    pub fn bnext(&self) -> Option<Node<'a>> {
-        Node::from_raw(self.inner.bnext)
-    }
-}
 
 fn str_to_ptr(input: &CString) -> *const i8 {
     input.as_ptr()
-}
-
-fn str_to_heap_ptr<T: Into<Vec<u8>>>(input: T) -> *mut i8 {
-    CString::new(input).unwrap().into_raw()
 }
 
 fn ptr_to_string(ptr: *const c_char) -> String {
@@ -715,8 +343,4 @@ fn ptr_to_string(ptr: *const c_char) -> String {
             Err(e) => panic!("decoding {:?} failed: {}", cstr, e),
         }
     }
-}
-
-fn validate_str(ptr: *const c_char) -> bool {
-    unsafe { str::from_utf8(CStr::from_ptr(ptr).to_bytes()).is_ok() }
 }

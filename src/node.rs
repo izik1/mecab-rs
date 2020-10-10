@@ -13,18 +13,18 @@ pub struct Path {
 /// # Safety
 /// This struct is UB to have a mutable reference to, because if has self-recursion
 #[repr(C)]
-pub struct Node2<'a> {
+pub struct Node<'a> {
     // prev: *mut raw_node,
-    pub prev: Option<&'a Node2<'a>>,
+    pub prev: Option<&'a Node<'a>>,
 
     // next: *mut raw_node,
-    pub next: Option<&'a Node2<'a>>,
+    pub next: Option<&'a Node<'a>>,
 
     // enext: *mut raw_node,
-    pub enext: Option<&'a Node2<'a>>,
+    pub enext: Option<&'a Node<'a>>,
 
     // bnext: *mut raw_node,
-    pub bnext: Option<&'a Node2<'a>>,
+    pub bnext: Option<&'a Node<'a>>,
 
     rpath: *const Path,
     lpath: *const Path,
@@ -47,7 +47,7 @@ pub struct Node2<'a> {
     cost: c_long,
 }
 
-impl<'a> Node2<'a> {
+impl<'a> Node<'a> {
     /// The visible surface of this node
     /// # Panics
     /// If the `surface` string isn't a valid UTF-8 string.
@@ -243,12 +243,12 @@ enum Mode {
 }
 
 pub struct NodeIter<'a> {
-    current: Option<&'a Node2<'a>>,
+    current: Option<&'a Node<'a>>,
     mode: Mode,
 }
 
 impl<'a> Iterator for NodeIter<'a> {
-    type Item = &'a Node2<'a>;
+    type Item = &'a Node<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let old = self.current.take()?;

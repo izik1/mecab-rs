@@ -1,9 +1,12 @@
 extern crate mecab;
 
-use mecab::{node::Node2, node::NodeStat, Tagger};
+use mecab::{
+    node::{Node, NodeStat},
+    Tagger,
+};
 
 fn main() {
-    dbg!(std::mem::size_of::<Node2>());
+    dbg!(std::mem::size_of::<Node>());
 
     let input = "太郎は次郎が持っている本を花子に渡した。";
     println!("INPUT: {}", input);
@@ -16,16 +19,12 @@ fn main() {
     println!("RESULT: {}", result);
 
     // gets N best results as String
-    let result = tagger
-        .parse_nbest_to_str(3, input)
-        .expect("failed to parse input");
+    let result = tagger.parse_nbest_to_str(3, input).expect("failed to parse input");
 
     println!("NBEST:\n{}", result);
 
     // gets N best in sequence
-    let mut nbest = tagger
-        .parse_nbest_init(input)
-        .expect("failed to parse input");
+    let mut nbest = tagger.parse_nbest_init(input).expect("failed to parse input");
 
     for i in 0..3 {
         if let Some(res) = nbest.next_str() {
@@ -33,11 +32,7 @@ fn main() {
         }
     }
 
-    for node in tagger
-        .parse_to_node(input)
-        .expect("failed to parse input")
-        .iter_next()
-    {
+    for node in tagger.parse_to_node(input).expect("failed to parse input").iter_next() {
         match node.stat() {
             NodeStat::BOS => {
                 print!("{} BOS ", node.id());

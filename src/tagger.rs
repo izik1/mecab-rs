@@ -5,7 +5,7 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, RawTagger};
+use crate::{dictionary::DictionaryInfo, node::Node, RawTagger};
 
 // todo
 struct Model;
@@ -32,19 +32,15 @@ impl Tagger<'static> {
     // todo: fix memory leak
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Self, Option<CString>> {
         unsafe {
-            let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
-                &CString::new(arg).unwrap(),
-            )));
+            let inner =
+                NonNull::new(crate::mecab_new2(crate::str_to_ptr(&CString::new(arg).unwrap())));
 
             let inner = match inner {
                 Some(inner) => inner,
                 None => return Err(crate::global_last_error()),
             };
 
-            Ok(Self {
-                inner,
-                phantom: PhantomData,
-            })
+            Ok(Self { inner, phantom: PhantomData })
         }
     }
 }
@@ -53,12 +49,12 @@ impl<'t> Tagger<'t> {
     /// # Safety
     /// This function assumes that `inner` is a valid pointer to a mecab object.
     /// Additionally, it cannot ensure that the lifetime it's valid for is the proper lifetime.
-    pub(crate) unsafe fn from_ptr(raw: NonNull<RawTagger>) -> Self {
-        Self {
-            inner: raw,
-            phantom: PhantomData,
-        }
-    }
+    // pub(crate) unsafe fn from_ptr(raw: NonNull<RawTagger>) -> Self {
+    //     Self {
+    //         inner: raw,
+    //         phantom: PhantomData,
+    //     }
+    // }
 
     /// uses a unique reference to `self` to get the last error reported.
     /// the unique reference ensures that nothing invalidates it, if you only have a `&self`, use [`last_error`] instead.
@@ -129,9 +125,10 @@ impl<'t> Tagger<'t> {
         }
     }
 
-    pub fn parse(&self, latice: &Lattice) -> bool {
-        unsafe { crate::mecab_parse_lattice(self.inner.as_ptr(), latice.inner) != 0 }
-    }
+    // todo
+    // pub fn parse(&self, latice: &Lattice) -> bool {
+    //     unsafe { crate::mecab_parse_lattice(self.inner.as_ptr(), latice.inner) != 0 }
+    // }
 
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
@@ -188,7 +185,7 @@ impl<'t> Tagger<'t> {
     pub fn parse_to_node<'a, T: AsRef<[u8]> + ?Sized>(
         &'a mut self,
         input: &'a T,
-    ) -> Result<&'a Node2<'a>, Option<&'a CStr>> {
+    ) -> Result<&'a Node<'a>, Option<&'a CStr>> {
         let input = input.as_ref();
         assert!(
             input.iter().all(|&byte| byte != 0),
@@ -305,10 +302,7 @@ impl<'t> Tagger<'t> {
 
         match res {
             false => Err(self.last_error_ref()),
-            true => Ok(NBest {
-                tagger: self,
-                _input: PhantomData,
-            }),
+            true => Ok(NBest { tagger: self, _input: PhantomData }),
         }
     }
 
@@ -321,9 +315,9 @@ impl<'t> Tagger<'t> {
     #[deprecated(note = "use `Lattice`")]
     pub fn format_node_to_cstr<'a>(
         &'a mut self,
-        node: &Node2,
+        node: &Node,
     ) -> Result<&'a CStr, Option<&'a CStr>> {
-        let res = unsafe { crate::mecab_format_node(self.inner.as_ptr(), node as *const Node2) };
+        let res = unsafe { crate::mecab_format_node(self.inner.as_ptr(), node as *const Node) };
 
         match res.is_null() {
             true => Err(self.last_error_ref()),
@@ -334,7 +328,7 @@ impl<'t> Tagger<'t> {
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
     #[deprecated(note = "use `Lattice`")]
-    pub fn format_node_to_str<'a>(&'a mut self, node: &Node2) -> Result<&'a str, Option<&'a str>> {
+    pub fn format_node_to_str<'a>(&'a mut self, node: &Node) -> Result<&'a str, Option<&'a str>> {
         #[allow(deprecated)]
         map_res_str(self.format_node_to_cstr(node))
     }
@@ -379,13 +373,10 @@ impl<'a> NBest<'a, '_> {
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
     pub fn next_str(&mut self) -> Option<&str> {
-        self.next_cstr()
-            .map(CStr::to_str)
-            .transpose()
-            .expect("String was not valid UTF-8")
+        self.next_cstr().map(CStr::to_str).transpose().expect("String was not valid UTF-8")
     }
 
-    pub fn next_node(&mut self) -> Option<&'a Node2<'a>> {
+    pub fn next_node(&mut self) -> Option<&'a Node<'a>> {
         // Safety:
         // requires exclusive access to `self.tagger.inner` (for the length of the function call)
         let res = unsafe { crate::mecab_nbest_next_tonode(self.tagger.inner.as_ptr()) };
