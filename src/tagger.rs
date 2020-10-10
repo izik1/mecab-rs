@@ -5,7 +5,10 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, Model, RawTagger};
+use crate::{dictionary::DictionaryInfo, node::Node2, Lattice, RawTagger};
+
+// todo
+struct Model;
 
 /// # Panics
 /// If the given CStr ends up not being a valid UTF-8 string
@@ -29,15 +32,19 @@ impl Tagger<'static> {
     // todo: fix memory leak
     pub fn new<T: Into<Vec<u8>>>(arg: T) -> Result<Self, Option<CString>> {
         unsafe {
-            let inner =
-                NonNull::new(crate::mecab_new2(crate::str_to_ptr(&CString::new(arg).unwrap())));
+            let inner = NonNull::new(crate::mecab_new2(crate::str_to_ptr(
+                &CString::new(arg).unwrap(),
+            )));
 
             let inner = match inner {
                 Some(inner) => inner,
                 None => return Err(crate::global_last_error()),
             };
 
-            Ok(Self { inner, phantom: PhantomData })
+            Ok(Self {
+                inner,
+                phantom: PhantomData,
+            })
         }
     }
 }
@@ -47,7 +54,10 @@ impl<'t> Tagger<'t> {
     /// This function assumes that `inner` is a valid pointer to a mecab object.
     /// Additionally, it cannot ensure that the lifetime it's valid for is the proper lifetime.
     pub(crate) unsafe fn from_ptr(raw: NonNull<RawTagger>) -> Self {
-        Self { inner: raw, phantom: PhantomData }
+        Self {
+            inner: raw,
+            phantom: PhantomData,
+        }
     }
 
     /// uses a unique reference to `self` to get the last error reported.
@@ -295,7 +305,10 @@ impl<'t> Tagger<'t> {
 
         match res {
             false => Err(self.last_error_ref()),
-            true => Ok(NBest { tagger: self, _input: PhantomData }),
+            true => Ok(NBest {
+                tagger: self,
+                _input: PhantomData,
+            }),
         }
     }
 
@@ -366,7 +379,10 @@ impl<'a> NBest<'a, '_> {
     /// # Panics
     /// If the returned string is *not* valid UTF-8.
     pub fn next_str(&mut self) -> Option<&str> {
-        self.next_cstr().map(CStr::to_str).transpose().expect("String was not valid UTF-8")
+        self.next_cstr()
+            .map(CStr::to_str)
+            .transpose()
+            .expect("String was not valid UTF-8")
     }
 
     pub fn next_node(&mut self) -> Option<&'a Node2<'a>> {

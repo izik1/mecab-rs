@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 
 mod dictionary;
-mod model;
+// mod model;
 pub mod node;
 mod tagger;
 
@@ -298,7 +298,7 @@ extern "C" {
 }
 
 use dictionary::DictionaryInfo;
-pub use model::Model;
+// pub use model::Model;
 use node::Node2;
 pub use tagger::Tagger;
 
